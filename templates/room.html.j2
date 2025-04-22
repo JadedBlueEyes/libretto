@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room - {{ name }}</title>
+    <style>
+        {{ include_str!("../css/room.css") | safe}}
+    </style>
+</head>
+<body>
+    <main class="room">
+        <div class="room-header">
+            <h1>{{ name }}</h1>
+            <p>Room ID: {{ room_id | safe }}</p>
+        </div>
+        <div class="timeline">
+        <div class="timeline-list">
+            {% for event in events %}
+                {% include "event.html.j2" %}
+            {% endfor %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>

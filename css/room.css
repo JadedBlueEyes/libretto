@@ -1,0 +1,107 @@
+:root {
+	color-scheme: light;
+	--font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+		Arial, sans-serif;
+
+	--background-color: #fff;
+	--text-color: #000;
+	--inverted-text-color: var(--background-color);
+	--secondary-text-color: #888;
+
+	@media (prefers-color-scheme: dark) {
+		color-scheme: dark;
+		--background-color: #000;
+		--login-background-color: #111;
+		--text-color: #fff;
+		--inverted-text-color: var(--background-color);
+		--secondary-text-color: #888;
+	}
+
+	--timeline-vertical-padding: .2rem;
+	--timeline-horizontal-padding: 1rem;
+	--avatar-size: 2.5rem;
+	--avatar-gap: 0.25rem;
+
+	--normal-font-size: 1rem;
+	--small-font-size: 0.8rem;
+
+	--message-font-size: var(--normal-font-size);
+	--timestamp-font-size: var(--small-font-size);
+}
+
+body {
+	font-family: var(--font-stack);
+	margin: 0;
+	padding: 0;
+	background-color: var(--background-color);
+	line-height: 1.5;
+	touch-action: none;
+	color: var(--text-color);
+}
+
+html {
+	touch-action: none;
+	background-color: var(--background-color);
+	font-size: 16px;
+}
+div.timeline-list {
+	max-width: 60em;
+	margin-inline: auto;
+}
+div.timeline-event {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding-inline: var(--timeline-horizontal-padding);
+	padding-block: var(--timeline-vertical-padding);
+
+	display: grid;
+	grid-template-columns: var(--avatar-size) var(--avatar-gap) auto auto;
+	grid-template-rows: auto;
+	gap: 0px 0px;
+	grid-template-areas:
+		"avatar avatar-gap sender sender"
+		"avatar avatar-gap content content"
+		"avatar avatar-gap content content";
+	.sender-profile {
+		grid-area: sender;
+		display: flex;
+		flex-direction: row;
+		.sender-name {
+			font-weight: bold;
+		}
+		.profile-timestamp {
+			font-size: var(--timestamp-font-size);
+			opacity: 0.8;
+			align-content: end;
+			margin-inline-start: 1ex;
+		}
+	}
+	.timestamp {
+		grid-area: sender;
+	}
+	.event-content.message-like {
+		grid-area: content;
+		background-color: var(--message-background-color);
+		color: var(--text-color);
+		font-size: var(--message-font-size);
+	}
+	.small-event {
+		grid-area: content;
+		color: red;
+		font-size: var(--small-font-size);
+	}
+	.timestamp-trailing {
+		display: none;
+	}
+
+	/* position: relative; */
+
+	/* .timestamp {
+            position: absolute;
+            padding: 4px 8px;
+            bottom: 0;
+            right: 0;
+            z-index: 3;
+        } */
+}

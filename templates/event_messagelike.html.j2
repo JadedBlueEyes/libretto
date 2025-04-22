@@ -1,0 +1,37 @@
+<div class="sender-profile">
+    {% if let Some(profile) = members.get(message_like_event.sender()) %}
+        <div class="sender-name">
+            {% if let Some(display_name) = profile.display_name() %} {{ display_name }}
+            {% else %} {{ profile.user_id().as_str() }} {% endif %}
+        </div>
+    {% else %}
+        <div class="sender-name no-profile">
+            {{message_like_event.sender()}}
+        </div>
+    {% endif %}
+    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(message_like_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(message_like_event.origin_server_ts()) }}</time>
+</div>
+<div class="event-content message-like">
+    {% match message_like_event %}
+        {% when AnySyncMessageLikeEvent::RoomMessage(sync_room_message_event) %}
+            {% match sync_room_message_event %}
+                {% when SyncMessageLikeEvent::Original(original_sync_message_like_event) %}
+                    <div class="message-text plaintext-body">
+                        {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(original_sync_message_like_event.content.body())  }}
+                    </div>
+                {% when SyncMessageLikeEvent::Redacted(sync_message_event) %}
+                    Message was redacted.
+            {% endmatch %}
+        {% when AnySyncMessageLikeEvent::Reaction(sync_room_reaction_event) %}
+            {% match sync_room_reaction_event %}
+                {% when SyncMessageLikeEvent::Original(original_sync_reaction_event) %}
+                    <div class="reaction-text plaintext-body">
+                        Reacted {{ original_sync_reaction_event.content.relates_to.key }} to event <span>{{ original_sync_reaction_event.content.relates_to.event_id }}</span>
+                    </div>
+                {% when SyncMessageLikeEvent::Redacted(sync_message_event) %}
+                    Reaction was redacted.
+            {% endmatch %}
+        {% when _ %} unsupported_content
+    {% endmatch %}
+    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(message_like_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(message_like_event.origin_server_ts()) }}</time>
+</div>
