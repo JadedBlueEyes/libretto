@@ -105,3 +105,10 @@ div.timeline-event {
             z-index: 3;
         } */
 }
+
+.formatted-body {
+	span[data-mx-color] {
+		color: attr(data-mx-color type(<color>))
+	}
+}
+    

@@ -17,6 +17,7 @@ matrix-sdk = { version = "0.11.0", features = ["anyhow"] }
 rand = "0.9.0"
 regex = "1.11.1"
 rpassword = "7.4.0"
+ruma = { version = "0.12.2", features = ["html-matrix", "html"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.44.2", features = ["rt"] }

@@ -16,9 +16,15 @@
         {% when AnySyncMessageLikeEvent::RoomMessage(sync_room_message_event) %}
             {% match sync_room_message_event %}
                 {% when SyncMessageLikeEvent::Original(original_sync_message_like_event) %}
-                    <div class="message-text plaintext-body">
-                        {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(original_sync_message_like_event.content.body())  }}
-                    </div>
+                    {% if let Some(formatted_body) = self::message_formatted_body(&original_sync_message_like_event.content.clone().into()).and_then(self::sanitised_html_body) %}
+                        <div class="message-text formatted-body">
+                            {{ formatted_body | safe}}
+                        </div>
+                    {% else %}
+                        <div class="message-text plaintext-body">
+                            {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(original_sync_message_like_event.content.body())  }}
+                        </div>
+                    {% endif %}
                 {% when SyncMessageLikeEvent::Redacted(sync_message_event) %}
                     Message was redacted.
             {% endmatch %}

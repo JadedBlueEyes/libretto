@@ -9,6 +9,10 @@ use matrix_sdk::{
         events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncMessageLikeEvent},
     },
 };
+use ruma::{
+    events::room::message::{FormattedBody, MessageType},
+    html::sanitize_html,
+};
 
 #[derive(askama::Template)] // this will generate the code...
 #[template(path = "room.html.j2")] // using the template in this path, relative
@@ -21,6 +25,46 @@ pub struct RoomTemplate<'a> {
     pub events: Vec<TimelineEvent>,
     pub hit_end_of_timeline: bool,
     pub room: &'a matrix_sdk::room::Room,
+}
+fn sanitised_html_body(formatted_body: &FormattedBody) -> Option<String> {
+    if formatted_body.format == ruma::events::room::message::MessageFormat::Html {
+        Some(sanitize_html(
+            &formatted_body.body,
+            ruma::html::HtmlSanitizerMode::Compat,
+            ruma::html::RemoveReplyFallback::Yes,
+        ))
+    } else {
+        None
+    }
+}
+pub(crate) fn message_formatted_body(message: &MessageType) -> Option<&FormattedBody> {
+    match message {
+        MessageType::Audio(audio_message_event_content) => {
+            audio_message_event_content.formatted_caption()
+        }
+        MessageType::Emote(emote_message_event_content) => {
+            emote_message_event_content.formatted.as_ref()
+        }
+        MessageType::File(file_message_event_content) => {
+            file_message_event_content.formatted_caption()
+        }
+        MessageType::Image(image_message_event_content) => {
+            image_message_event_content.formatted_caption()
+        }
+        MessageType::Location(location_message_event_content) => None,
+        MessageType::Notice(notice_message_event_content) => {
+            notice_message_event_content.formatted.as_ref()
+        }
+        MessageType::ServerNotice(server_notice_message_event_content) => None,
+        MessageType::Text(text_message_event_content) => {
+            text_message_event_content.formatted.as_ref()
+        }
+        MessageType::Video(video_message_event_content) => {
+            video_message_event_content.formatted_caption()
+        }
+        MessageType::VerificationRequest(key_verification_request_event_content) => None,
+        _ => None,
+    }
 }
 
 pub(crate) fn timestamp_to_string(ts: MilliSecondsSinceUnixEpoch) -> String {
