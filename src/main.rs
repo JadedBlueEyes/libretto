@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use askama::Template;
 use clap::Parser;
+use futures::StreamExt;
 use matrix_sdk::{
     Client, RoomMemberships,
     authentication::matrix::MatrixSession,
     config::SyncSettings,
+    encryption::Encryption,
     room::{Messages, MessagesOptions},
     ruma::{
         OwnedRoomId, RoomAliasId,
@@ -67,8 +69,12 @@ pub struct AccountConfig {
     #[arg(long, default_value_t = false)]
     pub set_device_name: bool,
 
+    /// Account recovery key
+    #[arg(short, long, env = "MATRIX_ACCOUNT_RECOVERY_KEY")]
+    pub recovery_key: Option<String>,
+
     /// Account data directory
-    #[arg(short, long, env = "MATTRIX_ACCOUNT_DATA_DIR")]
+    #[arg(short, long, env = "MATRIX_ACCOUNT_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
 }
 
@@ -169,6 +175,8 @@ async fn restore_session(session_file: &Path) -> anyhow::Result<(Client, Option<
     // Restore the Matrix user session.
     client.restore_session(user_session).await?;
 
+    verify_device(client.encryption(), None).await?;
+
     Ok((client, sync_token))
 }
 
@@ -238,6 +246,8 @@ async fn login(
         }
     }
 
+    verify_device(client.encryption(), config.recovery_key.clone()).await?;
+
     // Persist the session to reuse it later.
     // This is not very secure, for simplicity. If the system provides a way of
     // storing secrets securely, it should be used instead.
@@ -255,6 +265,40 @@ async fn login(
     info!("Session persisted in {}", session_file.to_string_lossy());
 
     Ok(client)
+}
+
+async fn verify_device(encryption: Encryption, recovery_key: Option<String>) -> anyhow::Result<()> {
+    let device = encryption
+        .get_own_device()
+        .await?
+        .expect("to have a device");
+
+    if device.is_verified_with_cross_signing() {
+        info!(
+            "Device {} of user {} is verified",
+            device.device_id(),
+            device.user_id(),
+        );
+    } else {
+        info!(
+            "Device {} of user {} is not verified",
+            device.device_id(),
+            device.user_id(),
+        );
+        let recovery_key = recovery_key.unwrap_or_else(|| {
+            println!("Type recovery key for the bot (characters won't show up as you type them)");
+            match prompt_password("Recovery Key: ") {
+                Ok(p) => p,
+                Err(err) => {
+                    panic!("FATAL: failed to get recovery key: {err}");
+                }
+            }
+        });
+        info!("Trying to recover device");
+        encryption.recovery().recover(&recovery_key).await?;
+    }
+    encryption.wait_for_e2ee_initialization_tasks().await;
+    Ok(())
 }
 
 async fn run(
