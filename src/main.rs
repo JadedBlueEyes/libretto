@@ -441,7 +441,7 @@ async fn run(
         room: &room,
     };
 
-    let path = Path::new("./output.html");
+    let path = Path::new("./out/output.html");
     let mut file = fs::File::create(path).await?;
     let mut buf: Vec<u8> = Vec::new();
     template.write_into(&mut buf)?;
