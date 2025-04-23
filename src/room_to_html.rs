@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use icu::{calendar::Gregorian, datetime::TypedDateTimeFormatter, locid::locale};
 use jiff::Timestamp;
 use matrix_sdk::{
-    deserialized_responses::{TimelineEvent, TimelineEventKind},
+    deserialized_responses::{DecryptedRoomEvent, TimelineEvent, TimelineEventKind},
     ruma::{
         MilliSecondsSinceUnixEpoch,
-        events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncMessageLikeEvent},
+        events::{AnyMessageLikeEventContent, AnySyncTimelineEvent},
     },
 };
 use ruma::{

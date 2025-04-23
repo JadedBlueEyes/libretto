@@ -415,6 +415,15 @@ async fn run(
                 .context("Room ID was not a valid ID or alias!")?
         };
 
+    client
+        .encryption()
+        .backups()
+        .download_room_keys_for_room(&room_id)
+        .await
+        .inspect_err(|e| {
+            error!("Failed to download room keys for room {room_id}: {e}");
+        })?;
+
     let room = client.get_room(&room_id).context("Failed to get room")?;
     let Messages {
         end: token,

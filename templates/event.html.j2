@@ -15,5 +15,19 @@
     
 
     </div>
-    {% when _ %} Non-Plaintext Event
+    {% when TimelineEventKind::Decrypted (DecryptedRoomEvent { event: event_content_raw, encryption_info, unsigned_encryption_info }) %}
+    <div class="timeline-event encrypted-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
+        {% match event_content_raw.deserialize() %}
+            {% when Ok(message_like_event) %} 
+                {% include "event_messagelike.html.j2" %}
+                            
+            {% when Err(err) %} <div class="small-event bad-event">Bad event {{err}}</div>
+        {% endmatch %}
+    </div>
+    {% when TimelineEventKind::UnableToDecrypt { event: event_content_raw, utd_info } %}
+    <div class="timeline-event encrypted-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
+        <div class="small-event unable-to-decrypt">
+            Unable to decrypt event {{utd_info | json}}. 
+        </div>
+    </div>
 {% endmatch %}
