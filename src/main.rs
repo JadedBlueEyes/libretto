@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use askama::Template;
 use clap::Parser;
-use futures_util::TryFutureExt;
 use matrix_sdk::{
     Client, RoomMemberships,
     authentication::matrix::MatrixSession,
@@ -180,7 +179,7 @@ async fn login(
     config: &AccountConfig,
 ) -> anyhow::Result<Client> {
     info!("No previous session found, logging in…");
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Generate a random passphrase.
     let passphrase: String = (&mut rng)
@@ -376,7 +375,6 @@ async fn run(
     let Messages {
         end: token,
         chunk: events,
-        state,
         ..
     } = room
         .messages(assign!(MessagesOptions::backward(), {limit: 100u8.into()}))

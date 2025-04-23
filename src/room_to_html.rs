@@ -51,18 +51,18 @@ pub(crate) fn message_formatted_body(message: &MessageType) -> Option<&Formatted
         MessageType::Image(image_message_event_content) => {
             image_message_event_content.formatted_caption()
         }
-        MessageType::Location(location_message_event_content) => None,
+        MessageType::Location(_location_message_event_content) => None,
         MessageType::Notice(notice_message_event_content) => {
             notice_message_event_content.formatted.as_ref()
         }
-        MessageType::ServerNotice(server_notice_message_event_content) => None,
+        MessageType::ServerNotice(_server_notice_message_event_content) => None,
         MessageType::Text(text_message_event_content) => {
             text_message_event_content.formatted.as_ref()
         }
         MessageType::Video(video_message_event_content) => {
             video_message_event_content.formatted_caption()
         }
-        MessageType::VerificationRequest(key_verification_request_event_content) => None,
+        MessageType::VerificationRequest(_key_verification_request_event_content) => None,
         _ => None,
     }
 }
@@ -76,14 +76,14 @@ pub(crate) fn timestamp_to_format_string(ts: MilliSecondsSinceUnixEpoch) -> Stri
 
 pub(crate) fn milliseconds_since_unix_epoch_to_string(milliseconds: i64) -> String {
     Timestamp::from_millisecond(milliseconds)
-        .map_or_else(|e| "Unknown Time".to_string(), |ts| ts.to_string())
+        .map_or_else(|_| "Unknown Time".to_string(), |ts| ts.to_string())
 }
 
 pub(crate) fn milliseconds_since_unix_epoch_to_format_string(milliseconds: i64) -> String {
     let formatter =
         TypedDateTimeFormatter::try_new(&locale!("en-GB").into(), Default::default()).unwrap();
     Timestamp::from_millisecond(milliseconds).map_or_else(
-        |e| "Unknown Time".to_string(),
+        |_| "Unknown Time".to_string(),
         |ts| {
             formatter
                 .format(
