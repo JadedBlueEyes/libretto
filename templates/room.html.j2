@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Room - {{ name }}</title>
     <style>
-        {{ include_str!("../css/room.css") | safe}}
+        /*<![CDATA[*/
+            {{ include_str!("../css/room.css") | safe}}
+        /*]]>*/
     </style>
 </head>
 <body>
