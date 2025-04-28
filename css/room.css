@@ -54,7 +54,7 @@ div.timeline-event {
 	padding-block: var(--timeline-vertical-padding);
 
 	display: grid;
-	grid-template-columns: var(--avatar-size) var(--avatar-gap) auto auto;
+	grid-template-columns: var(--avatar-size) var(--avatar-gap) 1fr 1fr;
 	grid-template-rows: auto;
 	gap: 0px 0px;
 	grid-template-areas:
@@ -104,9 +104,16 @@ div.timeline-event {
         } */
 }
 
+
+pre {
+	width: 100%;
+	max-height: max(50vh,400px);
+	overflow: auto;
+	padding-bottom: .5rem;
+}
+
 .formatted-body {
 	span[data-mx-color] {
 		color: attr(data-mx-color type(<color>))
 	}
 }
-    
