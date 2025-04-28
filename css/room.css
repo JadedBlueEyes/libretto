@@ -61,6 +61,11 @@ div.timeline-event {
 		"avatar avatar-gap sender sender"
 		"avatar avatar-gap content content"
 		"avatar avatar-gap content content";
+
+	&:target {
+		background-color: oklab( from yellow 0.4 a b);
+	}
+
 	.sender-profile {
 		grid-area: sender;
 		display: flex;
