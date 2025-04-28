@@ -16,20 +16,24 @@
         {% when Some(content) %}
             {% match content %}
                 {% when AnyMessageLikeEventContent::RoomMessage(sync_room_message_event) %}
-                            {% if let Some(formatted_body) = self::message_formatted_body(&sync_room_message_event.clone().into()).and_then(self::sanitised_html_body) %}
-                                <div class="message-text formatted-body">
-                                    {{ formatted_body | safe}}
-                                </div>
-                            {% else %}
-                                <div class="message-text plaintext-body">
-                                    {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(sync_room_message_event.body())  }}
-                                </div>
-                            {% endif %}
+                    {% if let Some(formatted_body) = self::message_formatted_body(&sync_room_message_event.clone().into()).and_then(self::sanitised_html_body) %}
+                        <div class="message-text formatted-body">
+                            {{ formatted_body | safe}}
+                        </div>
+                    {% else %}
+                        <div class="message-text plaintext-body">
+                            {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(sync_room_message_event.body())  }}
+                        </div>
+                    {% endif %}
                 {% when AnyMessageLikeEventContent::Reaction(sync_room_reaction_event) %}
-                            <div class="reaction-text plaintext-body">
-                                Reacted {{ sync_room_reaction_event.relates_to.key }} to event <span>{{ sync_room_reaction_event.relates_to.event_id }}</span>
-                            </div>
-                {% when _ %} unsupported_content
+                        <div class="reaction-text plaintext-body">
+                            Reacted {{ sync_room_reaction_event.relates_to.key }} to event <a href="#event-{{ sync_room_reaction_event.relates_to.event_id }}">{{ sync_room_reaction_event.relates_to.event_id }}</a>
+                        </div>
+                {% when AnyMessageLikeEventContent::RoomRedaction(sync_room_redaction_event) %}
+                        <div class="redaction-text plaintext-body">
+                            Reacted {% if let Some(event_id) = sync_room_redaction_event.redacts %} <a href="#event-{{ event_id }}">{{ event_id }}</a> {% else %} unknown event {%~ endif ~%} {%~ if let Some(reason) = sync_room_redaction_event.reason %}because <span class="redaction-reason">{{ reason }}</span>. {% else %}. {% endif %}</span>
+                        </div>
+                {% when _ %} {{content.event_type()}} is not supported
             {% endmatch %}
         {% when None %} Message was redacted.
     {% endmatch %}

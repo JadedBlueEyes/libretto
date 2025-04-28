@@ -1,6 +1,6 @@
 {% match event.kind %}
     {% when TimelineEventKind::PlainText { event: event_content_raw } %}
-    <div class="timeline-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
+    <div class="timeline-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
         {% match event_content_raw.deserialize() %}
 
             {% when Ok(event_content) %} 

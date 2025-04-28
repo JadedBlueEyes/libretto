@@ -10,8 +10,8 @@ use matrix_sdk::{
     },
 };
 use ruma::{
-    events::room::message::{FormattedBody, MessageType},
-    html::sanitize_html,
+    events::{room::message::{FormattedBody, MessageType}, EventContent},
+    html::sanitize_html
 };
 
 #[derive(askama::Template)] // this will generate the code...
