@@ -6,7 +6,7 @@ use matrix_sdk::{
     deserialized_responses::{DecryptedRoomEvent, TimelineEvent, TimelineEventKind},
     ruma::{
         MilliSecondsSinceUnixEpoch,
-        events::{AnyMessageLikeEventContent, AnySyncTimelineEvent},
+        events::{AnyMessageLikeEventContent, AnySyncTimelineEvent, AnyStateEventContent},
     },
 };
 use ruma::{

@@ -33,7 +33,7 @@
                         <div class="redaction-text plaintext-body">
                             Reacted {% if let Some(event_id) = sync_room_redaction_event.redacts %} <a href="#event-{{ event_id }}">{{ event_id }}</a> {% else %} unknown event {%~ endif ~%} {%~ if let Some(reason) = sync_room_redaction_event.reason %}because <span class="redaction-reason">{{ reason }}</span>. {% else %}. {% endif %}</span>
                         </div>
-                {% when _ %} {{content.event_type()}} is not supported
+                {% when _ %} <div class="unsupported-event">Unsupported message type {{content.event_type()}}</div>
             {% endmatch %}
         {% when None %} Message was redacted.
     {% endmatch %}

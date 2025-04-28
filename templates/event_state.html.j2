@@ -1,0 +1,27 @@
+<div class="sender-profile">
+    {% if let Some(profile) = members.get(state_event.sender()) %}
+        <div class="sender-name">
+            {% if let Some(display_name) = profile.display_name() %} {{ display_name }}
+            {% else %} {{ profile.user_id().as_str() }} {% endif %}
+        </div>
+    {% else %}
+        <div class="sender-name no-profile">
+            {{state_event.sender()}}
+        </div>
+    {% endif %}
+    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(state_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(state_event.origin_server_ts()) }}</time>
+</div>
+<div class="event-content state-event">
+    {% match state_event.original_content() %}
+        {% when Some(content) %}
+            {% match content %}
+                {% when AnyStateEventContent::RoomMember(sync_room_member_event) %}
+                    <div class="membership-text plaintext-body">
+                        Changed the membership of {{state_event.state_key()}} to {{sync_room_member_event.membership.as_str()}}.
+                    </div>
+                {% when _ %} <div class="unsupported-event">Unsupported state event type {{content.event_type()}}</div>
+            {% endmatch %}
+        {% when None %} State event was redacted.
+    {% endmatch %}
+    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(state_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(state_event.origin_server_ts()) }}</time>
+</div>

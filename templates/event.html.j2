@@ -1,27 +1,34 @@
+
 {% match event.kind %}
     {% when TimelineEventKind::PlainText { event: event_content_raw } %}
-    <div class="timeline-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
         {% match event_content_raw.deserialize() %}
 
             {% when Ok(event_content) %} 
+                <div class="timeline-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %} data-sender="{{ event_content.sender().as_str() }}">
                 {% match event_content %}
                     {% when AnySyncTimelineEvent::MessageLike(message_like_event) %}
                         {% include "event_messagelike.html.j2" %}
+                    {% when AnySyncTimelineEvent::State(state_event) %}
+                        {% include "event_state.html.j2" %}
                     {% when _ %} <div class="small-event unsupported-event"> Unsupported message type {{ event_content.event_type() }} </div>
                 {% endmatch %}
-                            
-            {% when Err(err) %} <div class="small-event bad-event">Bad event {{err}}</div>
+                </div>
+            {% when Err(err) %} 
+                <div class="timeline-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %} >
+                    <div class="small-event bad-event">Bad event {{err}}</div>
+                </div>
         {% endmatch %}
-    
-
-    </div>
     {% when TimelineEventKind::Decrypted (DecryptedRoomEvent { event: event_content_raw, encryption_info, unsigned_encryption_info }) %}
-    <div class="timeline-event encrypted-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
         {% match event_content_raw.deserialize() %}
             {% when Ok(message_like_event) %} 
-                {% include "event_messagelike.html.j2" %}
-                            
-            {% when Err(err) %} <div class="small-event bad-event">Bad event {{err}}</div>
+                <div class="timeline-event encrypted-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %} data-sender="{{ message_like_event.sender().as_str() }}">
+                    {% include "event_messagelike.html.j2" %}
+                </div>            
+                
+            {% when Err(err) %}
+                <div class="timeline-event encrypted-event" data-raw-event="{{ event.raw().json() | json }}" {% match event.event_id() %}{% when Some(id) %} data-event-id="{{ id }}" id="event-{{ id }}"{% when None %} data-event-no-id{% endmatch %}>
+                    <div class="small-event bad-event">Bad event {{err}}</div>
+                </div>
         {% endmatch %}
     </div>
     {% when TimelineEventKind::UnableToDecrypt { event: event_content_raw, utd_info } %}

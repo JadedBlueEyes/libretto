@@ -84,6 +84,11 @@ div.timeline-event {
 		color: var(--text-color);
 		font-size: var(--message-font-size);
 	}
+	.event-content.state-event {
+		grid-area: content;
+		color: var(--text-color);
+		font-size: var(--small-font-size);
+	}
 	.small-event {
 		grid-area: content;
 		color: red;
