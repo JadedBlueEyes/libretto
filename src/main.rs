@@ -1,19 +1,22 @@
 mod room_to_html;
+mod timeline;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use color_eyre::eyre::{self, Context, ContextCompat};
+
+use futures::{StreamExt, prelude::*};
+
 use askama::Template;
 use clap::Parser;
-use futures::StreamExt;
 use matrix_sdk::{
-    Client, RoomMemberships,
+    Client,
     authentication::matrix::MatrixSession,
     config::SyncSettings,
     encryption::Encryption,
     room::{Messages, MessagesOptions},
     ruma::{
-        OwnedRoomId, RoomAliasId,
+        RoomAliasId,
         api::client::{
             filter::FilterDefinition,
             uiaa::{AuthData, Password, UserIdentifier},
@@ -25,10 +28,13 @@ use rand::{Rng, distr::Alphanumeric};
 use room_to_html::RoomTemplate;
 use rpassword::prompt_password;
 use serde::{Deserialize, Serialize};
+use timeline::build_timeline_item;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, trace, warn};
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use ruma::OwnedRoomId; 
 
 #[derive(Parser, Debug)]
 pub struct Config {
@@ -110,7 +116,7 @@ struct FullSession {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> eyre::Result<()> {
     // Read args
     let config = Config::parse();
 
@@ -149,7 +155,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Restore a previous session.
-async fn restore_session(session_file: &Path) -> anyhow::Result<(Client, Option<String>)> {
+async fn restore_session(session_file: &Path) -> eyre::Result<(Client, Option<String>)> {
     info!(
         "Previous session found in '{}'",
         session_file.to_string_lossy()
@@ -185,7 +191,7 @@ async fn login(
     data_dir: &std::path::Path,
     session_file: &std::path::Path,
     config: &AccountConfig,
-) -> anyhow::Result<Client> {
+) -> eyre::Result<Client> {
     info!("No previous session found, logging in…");
     let mut rng = rand::rng();
 
@@ -267,7 +273,7 @@ async fn login(
     Ok(client)
 }
 
-async fn verify_device(encryption: Encryption, recovery_key: Option<String>) -> anyhow::Result<()> {
+async fn verify_device(encryption: Encryption, recovery_key: Option<String>) -> eyre::Result<()> {
     let device = encryption
         .get_own_device()
         .await?
@@ -306,7 +312,7 @@ async fn run(
     initial_sync_token: Option<String>,
     session_file: &Path,
     config: Config,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     // handler for autojoin
     // Handers here run for historic messages too
     // client.add_event_handler(crate::handlers::on_stripped_state_member);
@@ -425,6 +431,7 @@ async fn run(
         })?;
 
     let room = client.get_room(&room_id).context("Failed to get room")?;
+
     let Messages {
         end: token,
         chunk: events,
@@ -436,7 +443,16 @@ async fn run(
     // let paginator = Paginator::new(room.clone());
     // paginator.start_from(event_id, num_events)
     // let PaginationResult { events, hit_end_of_timeline } = paginator.paginate_backward(100u8.into()).await?;
-    let members = room.members(RoomMemberships::empty()).await?;
+    // let members = room.members(RoomMemberships::empty()).await?;
+
+    // pub members: HashMap<&'a matrix_sdk::ruma::UserId, &'a matrix_sdk::room::RoomMember>,
+
+    let timeline = stream::iter(events)
+        .then(build_timeline_item)
+        .try_collect::<Vec<_>>()
+        .await?;
+
+    println!("{timeline:#?}");
     let template = RoomTemplate {
         name: room
             .display_name()
@@ -444,10 +460,9 @@ async fn run(
             .map(|name| name.to_string())
             .unwrap_or("Unknown Room".to_owned()),
         room_id: &room_id,
-        events: events.into_iter().rev().collect(),
-        members: members.iter().map(|m| (m.user_id(), m)).collect(),
         hit_end_of_timeline: token.is_none(),
         room: &room,
+        events: timeline,
     };
 
     let path = Path::new("./out/output.html");
@@ -461,7 +476,7 @@ async fn run(
 /// Persist the sync token for a future session.
 /// Note that this is needed only when using `sync_once`. Other sync methods get
 /// the sync token from the store.
-async fn persist_sync_token(session_file: &Path, sync_token: String) -> anyhow::Result<()> {
+async fn persist_sync_token(session_file: &Path, sync_token: String) -> eyre::Result<()> {
     let serialized_session = fs::read_to_string(session_file).await?;
     let mut full_session: FullSession = serde_json::from_str(&serialized_session)?;
 

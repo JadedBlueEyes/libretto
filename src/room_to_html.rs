@@ -1,28 +1,19 @@
-use std::collections::HashMap;
-
 use icu::{calendar::Gregorian, datetime::TypedDateTimeFormatter, locid::locale};
 use jiff::Timestamp;
-use matrix_sdk::{
-    deserialized_responses::{DecryptedRoomEvent, TimelineEvent, TimelineEventKind},
-    ruma::{
-        MilliSecondsSinceUnixEpoch,
-        events::{AnyMessageLikeEventContent, AnySyncTimelineEvent, AnyStateEventContent},
-    },
-};
+use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
 use ruma::{
-    events::{room::message::{FormattedBody, MessageType}, EventContent},
-    html::sanitize_html
+    events::room::message::{FormattedBody, MessageType},
+    html::sanitize_html,
 };
 
-#[derive(askama::Template)] // this will generate the code...
-#[template(path = "room.html.j2")] // using the template in this path, relative
-// to the `templates` dir in the crate root
+use crate::timeline::TimelineItem;
+
+#[derive(askama::Template)] 
+#[template(path = "room.html.j2")] 
 pub struct RoomTemplate<'a> {
-    // the name of the struct can be anything
     pub room_id: &'a matrix_sdk::ruma::RoomId,
     pub name: String,
-    pub members: HashMap<&'a matrix_sdk::ruma::UserId, &'a matrix_sdk::room::RoomMember>,
-    pub events: Vec<TimelineEvent>,
+    pub events: Vec<TimelineItem>,
     pub hit_end_of_timeline: bool,
     pub room: &'a matrix_sdk::room::Room,
 }

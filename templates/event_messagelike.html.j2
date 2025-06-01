@@ -1,41 +1,43 @@
 <div class="sender-profile">
-    {% if let Some(profile) = members.get(message_like_event.sender()) %}
+    {% if let Some(profile) = members.get(message_like_event.sender) %}
         <div class="sender-name">
             {% if let Some(display_name) = profile.display_name() %} {{ display_name }}
             {% else %} {{ profile.user_id().as_str() }} {% endif %}
         </div>
     {% else %}
         <div class="sender-name no-profile">
-            {{message_like_event.sender()}}
+            {{ message_like_event.sender.as_str() }}
         </div>
     {% endif %}
-    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(message_like_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(message_like_event.origin_server_ts()) }}</time>
+    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(message_like_event.timestamp) }}">{{ self::timestamp_to_format_string(message_like_event.timestamp) }}</time>
 </div>
 <div class="event-content message-like">
-    {% match message_like_event.original_content() %}
-        {% when Some(content) %}
-            {% match content %}
-                {% when AnyMessageLikeEventContent::RoomMessage(sync_room_message_event) %}
-                    {% if let Some(formatted_body) = self::message_formatted_body(&sync_room_message_event.clone().into()).and_then(self::sanitised_html_body) %}
-                        <div class="message-text formatted-body">
-                            {{ formatted_body | safe}}
-                        </div>
-                    {% else %}
-                        <div class="message-text plaintext-body">
-                            {{ matrix_sdk::ruma::events::room::message::sanitize::remove_plain_reply_fallback(sync_room_message_event.body())  }}
-                        </div>
-                    {% endif %}
-                {% when AnyMessageLikeEventContent::Reaction(sync_room_reaction_event) %}
-                        <div class="reaction-text plaintext-body">
-                            Reacted {{ sync_room_reaction_event.relates_to.key }} to event <a href="#event-{{ sync_room_reaction_event.relates_to.event_id }}">{{ sync_room_reaction_event.relates_to.event_id }}</a>
-                        </div>
-                {% when AnyMessageLikeEventContent::RoomRedaction(sync_room_redaction_event) %}
-                        <div class="redaction-text plaintext-body">
-                            Reacted {% if let Some(event_id) = sync_room_redaction_event.redacts %} <a href="#event-{{ event_id }}">{{ event_id }}</a> {% else %} unknown event {%~ endif ~%} {%~ if let Some(reason) = sync_room_redaction_event.reason %}because <span class="redaction-reason">{{ reason }}</span>. {% else %}. {% endif %}</span>
-                        </div>
-                {% when _ %} <div class="unsupported-event">Unsupported message type {{content.event_type()}}</div>
-            {% endmatch %}
-        {% when None %} Message was redacted.
+    {% match message_like_event.kind %}
+        {% when MsgLikeKind::Message(message_content) %}
+            {% if let Some(formatted_body) = self::message_formatted_body(&message_content.msgtype).and_then(self::sanitised_html_body) %}
+                <div class="message-text formatted-body">
+                    {{ formatted_body | safe}}
+                    {% if message_content.edited %} (edited) {% endif %}
+                </div>
+            {% else %}
+                <div class="message-text plaintext-body">
+                    Placeholder for plain text body of {{ message_content.msgtype._to_string() }}
+                    {% if message_content.edited %} (edited) {% endif %}
+                </div>
+            {% endif %}
+        {% when MsgLikeKind::Redacted %}
+            <div class="redaction-text plaintext-body">
+                Message was redacted.
+            </div>
+        {% when MsgLikeKind::UnableToDecrypt %}
+            <div class="unable-to-decrypt">
+                Unable to decrypt this message.
+            </div>
     {% endmatch %}
-    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(message_like_event.origin_server_ts()) }}">{{ self::timestamp_to_format_string(message_like_event.origin_server_ts()) }}</time>
+    {% if let Some(in_reply_to_details) = message_like_event.in_reply_to %}
+        <div class="in-reply-to">
+            Replying to <a href="#event-{{ in_reply_to_details.event_id }}">{{ in_reply_to_details.event_id }}</a>
+        </div>
+    {% endif %}
+    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(message_like_event.timestamp) }}">{{ self::timestamp_to_format_string(message_like_event.timestamp) }}</time>
 </div>
