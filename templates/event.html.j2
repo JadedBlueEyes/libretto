@@ -1,4 +1,18 @@
-{{ event.raw.get() }}
+<div class="timeline-event" data-raw-event="{{ event.raw.get() }}" {% if let Some(event_id) = event.event_id %}data-event-id="{{ event_id }}" id="event-{{ event_id }}" {% endif %}>
+    {% match event.content %}
+        {% when TimelineItemContent::MsgLike(msg_like_content) %}
+            {% set message_like_event = msg_like_content %}
+            {% include "event_messagelike.html.j2" %}
+        {% when TimelineItemContent::OtherState(other_state_content) %}
+            {% set state_event = other_state_content %}
+            <pre>state_event = {{ format!("{state_event:?}") }}</pre>
+            {# {% include "event_state.html.j2" %} #}
+        {% when TimelineItemContent::FailedToParseMessageLike { error } %}
+            <div class="small-event bad-event">Bad event (FailedToParseMessageLike): {{error}}</div>
+        {% when TimelineItemContent::FailedToParseState { event_type, state_key, error } %}
+            <div class="small-event bad-event">Bad event (FailedToParseState {{ event_type }} for {{ state_key }}): {{error}}</div>
+    {% endmatch %}
+</div>
 {# {% match event.content %}
     {% when TimelineItemContent::MsgLike(msg_like_content) %}
         <div class="timeline-event" data-raw-event="{{ event.raw | json }}" data-event-id="{{ event.event_id }}" id="event-{{ event.event_id }}" data-sender="{{ msg_like_content.sender.as_str() }}">

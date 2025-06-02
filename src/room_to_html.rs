@@ -1,29 +1,22 @@
 use icu::{calendar::Gregorian, datetime::TypedDateTimeFormatter, locid::locale};
 use jiff::Timestamp;
 use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
-use ruma::{
-    events::room::message::{FormattedBody, MessageType},
-    html::sanitize_html,
-};
+use ruma::events::room::message::{FormattedBody, MessageType};
 
-use crate::timeline::TimelineItem;
+use crate::timeline::{MsgLikeKind, TimelineEvent, TimelineItemContent};
 
-#[derive(askama::Template)] 
-#[template(path = "room.html.j2")] 
+#[derive(askama::Template)]
+#[template(path = "room.html.j2")]
 pub struct RoomTemplate<'a> {
     pub room_id: &'a matrix_sdk::ruma::RoomId,
     pub name: String,
-    pub events: Vec<TimelineItem>,
+    pub events: Vec<TimelineEvent>,
     pub hit_end_of_timeline: bool,
     pub room: &'a matrix_sdk::room::Room,
 }
-fn sanitised_html_body(formatted_body: &FormattedBody) -> Option<String> {
+fn html_body(formatted_body: &FormattedBody) -> Option<&str> {
     if formatted_body.format == ruma::events::room::message::MessageFormat::Html {
-        Some(sanitize_html(
-            &formatted_body.body,
-            ruma::html::HtmlSanitizerMode::Compat,
-            ruma::html::RemoveReplyFallback::Yes,
-        ))
+        Some(&formatted_body.body)
     } else {
         None
     }
@@ -58,10 +51,10 @@ pub(crate) fn message_formatted_body(message: &MessageType) -> Option<&Formatted
     }
 }
 
-pub(crate) fn timestamp_to_string(ts: MilliSecondsSinceUnixEpoch) -> String {
+pub(crate) fn timestamp_to_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_string(ts.0.into())
 }
-pub(crate) fn timestamp_to_format_string(ts: MilliSecondsSinceUnixEpoch) -> String {
+pub(crate) fn timestamp_to_format_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_format_string(ts.0.into())
 }
 

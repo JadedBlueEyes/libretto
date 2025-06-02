@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use color_eyre::eyre;
 use futures::prelude::*;
 use ruma::{
-    MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId,
+    MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId, RoomId,
     events::{
         AnyFullStateEventContent, AnySyncMessageLikeEvent, AnySyncTimelineEvent, StateEventType,
         room::message::{MessageType, Relation, RoomMessageEventContentWithoutRelation},
@@ -12,42 +12,61 @@ use ruma::{
 };
 use serde_json::value::RawValue;
 
+pub async fn build_timeline_event(
+    client: &matrix_sdk::Client,
+    room_id: &RoomId,
+    event: matrix_sdk::deserialized_responses::TimelineEvent,
+) -> eyre::Result<TimelineEvent> {
+    let event_de = event.raw().deserialize()?;
+    let sender = event_de.sender();
+    let timestamp = event_de.origin_server_ts();
+
+    let room = client.get_room(room_id);
+    let sender_profile = if let Some(ref room) = room {
+        let mut profile = room.get_member_no_sync(sender).await?;
+
+        // Fallback to the slow path.
+        if profile.is_none() {
+            profile = room.get_member(sender).await?;
+        }
+        profile.as_mut().map(|profile| Profile {
+            display_name: profile.display_name().map(ToOwned::to_owned),
+            display_name_ambiguous: profile.name_ambiguous(),
+            avatar_url: profile.avatar_url().map(ToOwned::to_owned),
+        })
+    } else {
+        None
+    };
+    let is_room_encrypted = room
+        .map(|r| r.encryption_state().is_encrypted())
+        .unwrap_or(false);
+
+    let content = build_timeline_item(&event_de).await?;
+
+    Ok(TimelineEvent {
+        sender: sender.into(),
+        sender_profile,
+        timestamp,
+        content,
+        is_room_encrypted,
+        event_id: event.event_id(),
+        raw: event.into_raw().into_json(),
+    })
+}
 
 pub async fn build_timeline_item(
-    event: matrix_sdk::deserialized_responses::TimelineEvent,
-) -> eyre::Result<TimelineItem> {
-    let event_id = event.event_id().to_owned();
-
-    match event.kind {
-        matrix_sdk::deserialized_responses::TimelineEventKind::PlainText { event: raw_event } => {
-            match raw_event.deserialize() {
-                Ok(AnySyncTimelineEvent::MessageLike(msg_like)) => Ok(TimelineItem {
-                    event_id,
-                    content: messagelike_to_content(&msg_like).await?,
-                    raw: raw_event.into_json(),
-                }),
-                Ok(AnySyncTimelineEvent::State(state_event)) => Ok(TimelineItem {
-                    event_id,
-                    content: TimelineItemContent::OtherState(OtherState {
-                        state_key: state_event.state_key().to_string(),
-                        content: state_event.content(),
-                    }),
-                    raw: raw_event.into_json(),
-                }),
-                Err(e) => Ok(TimelineItem {
-                    event_id,
-                    content: TimelineItemContent::FailedToParseMessageLike { error: Arc::new(e) },
-                    raw: raw_event.into_json(),
-                }),
-            }
+    event: &AnySyncTimelineEvent,
+) -> eyre::Result<TimelineItemContent> {
+    match event {
+        AnySyncTimelineEvent::MessageLike(any_sync_message_like_event) => {
+            messagelike_to_content(any_sync_message_like_event).await
         }
-        matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted_room_event) => {
-            todo!()
+        AnySyncTimelineEvent::State(state_event) => {
+            Ok(TimelineItemContent::OtherState(OtherState {
+                state_key: state_event.state_key().to_string(),
+                content: state_event.content(),
+            }))
         }
-        matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
-            event,
-            utd_info,
-        } => todo!(),
     }
 }
 async fn messagelike_to_content(
@@ -103,19 +122,9 @@ async fn messagelike_to_content(
 }
 
 #[derive(Clone, Debug)]
-pub struct TimelineItem {
+pub struct TimelineEvent {
     /// The ID of the event.
     pub event_id: Option<OwnedEventId>,
-
-    /// The content of the event.
-    pub content: TimelineItemContent,
-
-    /// The JSON serialization of the event.
-    pub raw: Box<RawValue>,
-}
-
-#[derive(Clone, Debug)]
-pub struct TimelineEvent {
     /// The sender of the event.
     pub sender: OwnedUserId,
     /// The sender's profile of the event.
@@ -128,6 +137,9 @@ pub struct TimelineEvent {
     ///
     /// May be false when we don't know about the room encryption status yet.
     pub is_room_encrypted: bool,
+
+    /// The JSON serialization of the event.
+    pub raw: Box<RawValue>,
 }
 
 /// The display name and avatar URL of a room member.
@@ -226,6 +238,7 @@ pub struct Message {
     pub msgtype: MessageType,
     pub edited: bool,
 }
+
 impl Message {
     pub fn from_event(
         mut msgtype: MessageType,

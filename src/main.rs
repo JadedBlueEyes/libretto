@@ -28,13 +28,13 @@ use rand::{Rng, distr::Alphanumeric};
 use room_to_html::RoomTemplate;
 use rpassword::prompt_password;
 use serde::{Deserialize, Serialize};
-use timeline::build_timeline_item;
+use timeline::build_timeline_event;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, trace, warn};
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use ruma::OwnedRoomId; 
+use ruma::OwnedRoomId;
 
 #[derive(Parser, Debug)]
 pub struct Config {
@@ -443,12 +443,9 @@ async fn run(
     // let paginator = Paginator::new(room.clone());
     // paginator.start_from(event_id, num_events)
     // let PaginationResult { events, hit_end_of_timeline } = paginator.paginate_backward(100u8.into()).await?;
-    // let members = room.members(RoomMemberships::empty()).await?;
-
-    // pub members: HashMap<&'a matrix_sdk::ruma::UserId, &'a matrix_sdk::room::RoomMember>,
 
     let timeline = stream::iter(events)
-        .then(build_timeline_item)
+        .then(|i| build_timeline_event(&client, &room_id, i))
         .try_collect::<Vec<_>>()
         .await?;
 

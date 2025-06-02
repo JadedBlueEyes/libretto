@@ -1,27 +1,27 @@
 <div class="sender-profile">
-    {% if let Some(profile) = members.get(message_like_event.sender) %}
+    {% if let Some(profile) = event.sender_profile %}
         <div class="sender-name">
-            {% if let Some(display_name) = profile.display_name() %} {{ display_name }}
-            {% else %} {{ profile.user_id().as_str() }} {% endif %}
+            {% if let Some(display_name) = profile.display_name %} {{ display_name }}
+            {% else %} {{ event.sender.as_str() }} {% endif %}
         </div>
     {% else %}
         <div class="sender-name no-profile">
-            {{ message_like_event.sender.as_str() }}
+            {{ event.sender.as_str() }}
         </div>
     {% endif %}
-    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(message_like_event.timestamp) }}">{{ self::timestamp_to_format_string(message_like_event.timestamp) }}</time>
+    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
 </div>
 <div class="event-content message-like">
     {% match message_like_event.kind %}
         {% when MsgLikeKind::Message(message_content) %}
-            {% if let Some(formatted_body) = self::message_formatted_body(&message_content.msgtype).and_then(self::sanitised_html_body) %}
+            {% if let Some(formatted_body) = self::message_formatted_body(&message_content.msgtype).and_then(self::html_body) %}
                 <div class="message-text formatted-body">
-                    {{ formatted_body | safe}}
+                    {{ formatted_body | safe }}
                     {% if message_content.edited %} (edited) {% endif %}
                 </div>
             {% else %}
                 <div class="message-text plaintext-body">
-                    Placeholder for plain text body of {{ message_content.msgtype._to_string() }}
+                    {{ message_content.msgtype.body() }}
                     {% if message_content.edited %} (edited) {% endif %}
                 </div>
             {% endif %}
@@ -33,11 +33,15 @@
             <div class="unable-to-decrypt">
                 Unable to decrypt this message.
             </div>
+        {% when MsgLikeKind::Hidden %}
+            <div class="hidden-message">
+            </div>
     {% endmatch %}
     {% if let Some(in_reply_to_details) = message_like_event.in_reply_to %}
         <div class="in-reply-to">
             Replying to <a href="#event-{{ in_reply_to_details.event_id }}">{{ in_reply_to_details.event_id }}</a>
         </div>
     {% endif %}
-    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(message_like_event.timestamp) }}">{{ self::timestamp_to_format_string(message_like_event.timestamp) }}</time>
+
+    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
 </div>
