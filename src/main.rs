@@ -3,6 +3,7 @@ mod timeline;
 
 use std::path::{Path, PathBuf};
 
+use axum::{extract, response::IntoResponse, routing::get};
 use color_eyre::eyre::{self, Context, ContextCompat};
 
 use futures::{StreamExt, prelude::*};
@@ -29,7 +30,7 @@ use room_to_html::RoomTemplate;
 use rpassword::prompt_password;
 use serde::{Deserialize, Serialize};
 use timeline::build_timeline_event;
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::{fs, signal};
 use tracing::{error, info, trace, warn};
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -40,18 +41,9 @@ use ruma::OwnedRoomId;
 pub struct Config {
     #[clap(flatten)]
     pub account_config: AccountConfig,
-    #[clap(flatten)]
-    pub room_config: RoomConfig,
 
     #[clap(flatten)]
     pub(crate) verbose: clap_verbosity_flag::Verbosity,
-}
-
-#[derive(Parser, Debug)]
-pub struct RoomConfig {
-    /// The room ID to translate. Also accepts an alias.
-    #[arg(long, env = "MATRIX_ROOM_ID")]
-    pub room_id: String,
 }
 
 #[derive(Parser, Debug)]
@@ -149,11 +141,151 @@ async fn main() -> eyre::Result<()> {
 
     client.event_cache().subscribe()?;
 
-    run(client, sync_token, &session_file, config).await?;
+    run(&client, sync_token, &session_file, &config).await?;
 
+    let app = axum::Router::new()
+        .route("/room/{room_id}", get(room))
+        .with_state(client.clone());
+
+    // try to first get a socket from listenfd, if that does not give us
+    // one (eg: no systemd or systemfd), open on port 3000 instead.
+    let mut listenfd = listenfd::ListenFd::from_env();
+    let listener = match listenfd.take_tcp_listener(0).unwrap() {
+        Some(listener) => {
+            listener.set_nonblocking(true)?;
+            tokio::net::TcpListener::from_std(listener)
+        }
+        None => tokio::net::TcpListener::bind("0.0.0.0:3000").await,
+    }?;
+
+    let signal = shutdown_signal();
+
+    let sync_task = tokio::spawn(async move {
+        // let session_file = session_file.to_owned();
+        let sync_loop =
+            client.sync_with_result_callback(SyncSettings::default(), |sync_result| async {
+                let response = sync_result?;
+
+                // We persist the token each time to be able to restore our session
+                persist_sync_token(&session_file, response.next_batch)
+                    .await
+                    .map_err(|err| matrix_sdk::Error::UnknownError(err.into()))?;
+
+                Ok(matrix_sdk::LoopCtrl::Continue)
+            });
+
+        tokio::select! {
+            _ = sync_loop => info!("Sync loop finished"),
+            _ = signal => info!("Sync shutdown in progress"),
+        }
+    });
+
+    info!(listener = ?listener,  "Serving!");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    sync_task.await?;
     Ok(())
 }
 
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+}
+
+async fn room(
+    extract::State(client): extract::State<Client>,
+    extract::Path(room_id): extract::Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    let room_id: OwnedRoomId = if let Ok(alias) = <&RoomAliasId>::try_from(room_id.as_str()) {
+        client.resolve_room_alias(alias).await?.room_id
+    } else {
+        OwnedRoomId::try_from(room_id.as_str()).context("Room ID was not a valid ID or alias!")?
+    };
+
+    client
+        .encryption()
+        .backups()
+        .download_room_keys_for_room(&room_id)
+        .await
+        .inspect_err(|e| {
+            error!("Failed to download room keys for room {room_id}: {e}");
+        })?;
+
+    let room = client.get_room(&room_id).context("Failed to get room")?;
+
+    let Messages {
+        end: token,
+        chunk: events,
+        ..
+    } = room
+        .messages(assign!(MessagesOptions::backward(), {limit: 100u8.into()}))
+        .await?;
+
+    // let paginator = Paginator::new(room.clone());
+    // paginator.start_from(event_id, num_events)
+    // let PaginationResult { events, hit_end_of_timeline } = paginator.paginate_backward(100u8.into()).await?;
+
+    let timeline = stream::iter(events)
+        .then(|i| build_timeline_event(&client, &room_id, i))
+        .try_collect::<Vec<_>>()
+        .await?;
+
+    // println!("{timeline:#?}");
+    let template = RoomTemplate {
+        name: room
+            .display_name()
+            .await
+            .map(|name| name.to_string())
+            .unwrap_or("Unknown Room".to_owned()),
+        room_id: &room_id,
+        hit_end_of_timeline: token.is_none(),
+        room: &room,
+        events: timeline,
+    };
+    Ok(axum::response::Html(template.render()?).into_response())
+}
+
+struct AppError(eyre::Report);
+
+// Tell axum how to convert `AppError` into a response.
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Something went wrong: {}", self.0),
+        )
+            .into_response()
+    }
+}
+
+impl<E> From<E> for AppError
+where
+    E: Into<eyre::Report>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
 /// Restore a previous session.
 async fn restore_session(session_file: &Path) -> eyre::Result<(Client, Option<String>)> {
     info!(
@@ -308,10 +440,10 @@ async fn verify_device(encryption: Encryption, recovery_key: Option<String>) -> 
 }
 
 async fn run(
-    client: Client,
+    client: &Client,
     initial_sync_token: Option<String>,
     session_file: &Path,
-    config: Config,
+    config: &Config,
 ) -> eyre::Result<()> {
     // handler for autojoin
     // Handers here run for historic messages too
@@ -409,64 +541,7 @@ async fn run(
         }
     }
 
-    // We have done initial sync & setup, wait for new messages.
-
-    // Write a function to parse and resolve a room alias, or a room ID from config.room_config.room_id
-    // client.resolve_room_alias(alias)
-    let room_id: OwnedRoomId =
-        if let Ok(alias) = <&RoomAliasId>::try_from(config.room_config.room_id.as_str()) {
-            client.resolve_room_alias(alias).await?.room_id
-        } else {
-            OwnedRoomId::try_from(config.room_config.room_id.as_str())
-                .context("Room ID was not a valid ID or alias!")?
-        };
-
-    client
-        .encryption()
-        .backups()
-        .download_room_keys_for_room(&room_id)
-        .await
-        .inspect_err(|e| {
-            error!("Failed to download room keys for room {room_id}: {e}");
-        })?;
-
-    let room = client.get_room(&room_id).context("Failed to get room")?;
-
-    let Messages {
-        end: token,
-        chunk: events,
-        ..
-    } = room
-        .messages(assign!(MessagesOptions::backward(), {limit: 100u8.into()}))
-        .await?;
-
-    // let paginator = Paginator::new(room.clone());
-    // paginator.start_from(event_id, num_events)
-    // let PaginationResult { events, hit_end_of_timeline } = paginator.paginate_backward(100u8.into()).await?;
-
-    let timeline = stream::iter(events)
-        .then(|i| build_timeline_event(&client, &room_id, i))
-        .try_collect::<Vec<_>>()
-        .await?;
-
-    println!("{timeline:#?}");
-    let template = RoomTemplate {
-        name: room
-            .display_name()
-            .await
-            .map(|name| name.to_string())
-            .unwrap_or("Unknown Room".to_owned()),
-        room_id: &room_id,
-        hit_end_of_timeline: token.is_none(),
-        room: &room,
-        events: timeline,
-    };
-
-    let path = Path::new("./out/output.html");
-    let mut file = fs::File::create(path).await?;
-    let mut buf: Vec<u8> = Vec::new();
-    template.write_into(&mut buf)?;
-    file.write_all(&buf).await?;
+    // Initial sync and setup is done
     Ok(())
 }
 
