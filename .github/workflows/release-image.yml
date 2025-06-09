@@ -1,0 +1,193 @@
+name: Release Docker Image
+concurrency:
+  group: "release-image-${{ github.ref }}"
+
+on:
+  push:
+    branches: 
+      - main
+    tags:
+      - "*.*.*"
+
+jobs:
+  define-variables:
+    runs-on: ubuntu-latest
+    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+    env:
+      DOCKER_HUB_ENABLED: ${{ (vars.DOCKER_HUB_REPO_NAME != '') && (secrets.DOCKER_HUB_USERNAME != '') && (secrets.DOCKER_HUB_PASSWORD != '') && 'true' || 'false' }}
+      GHCR_ENABLED: "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && 'true' || 'false' }}"
+      DOCKER_HUB_REPO_NAME: ${{vars.DOCKER_HUB_REPO_NAME || ''}}
+    
+    outputs:
+      images: ${{ steps.var.outputs.images }}
+      ghcr_image: ${{ steps.var.outputs.ghcr_image }}
+      docker_image: ${{ steps.var.outputs.docker_image }}
+    steps:
+      - name: Setting variables
+        uses: actions/github-script@v7
+        id: var
+        with:
+          script: |
+            const githubRepo = '${{ github.repository }}'.toLowerCase()
+            const repoId = githubRepo.split('/')[1]
+            const ghcrImage = 'ghcr.io/' + githubRepo
+            const dockerRepo = process.env.DOCKER_HUB_REPO_NAME || ('${{ secrets.DOCKER_HUB_USERNAME }}'.toLowerCase() + '/' + repoId)
+            const dockerImage = 'docker.io/' + dockerRepo
+            core.setOutput('ghcr_image', ghcrImage)
+            core.setOutput('docker_image', dockerImage)
+            let images = []
+            if (process.env.GHCR_ENABLED === "true") {
+              images.push(ghcrImage)
+            }
+            if (process.env.DOCKER_HUB_ENABLED === "true") {
+              images.push(dockerImage)
+            }
+            core.setOutput('images', images.join("\n"))
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    needs: define-variables
+    strategy:
+      matrix:
+        slug: [linux-amd64]
+        include:
+          - slug: linux-amd64
+            platform: linux/amd64
+            
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      - name: Log in to the Docker Hub registry
+        if: env.DOCKER_HUB_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+      - name: Log in to the GitHub Container Registry
+        if: env.GHCR_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.0.') }}
+            type=semver,pattern=v{{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=ref,event=branch
+            type=ref,event=pr
+          images: ${{ needs.define-variables.outputs.images }}
+          # default labels & annotations: https://github.com/docker/metadata-action/blob/master/src/meta.ts#L509
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
+      # These steps work around docker mount caches not being cached between runs in CI providers.
+      # It manually injects the mounts into Docker.
+      # We use 
+
+      - name: Cache Rust registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            .cargo/git
+            .cargo/git/checkouts
+            .cargo/registry
+            .cargo/registry/src
+          key: rust-registry-image-${{hashFiles('**/Cargo.lock') }}
+      - id: rustc-version
+        shell: bash
+        run: |
+            echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
+      - name: Cache cargo target
+        id: cache-cargo-target
+        uses: actions/cache@v3
+        with:
+          path: |
+            cargo-target-${{ matrix.slug }}
+          key: cargo-target-${{ matrix.slug }}-${{hashFiles('**/Cargo.lock') }}-${{steps.rustc-version.outputs.version}}
+      - name: Cache apt cache
+        id: cache-apt
+        uses: actions/cache@v3
+        with:
+          path: |
+            var-cache-apt-${{ matrix.slug }}
+          key: var-cache-apt-${{ matrix.slug }}
+      - name: Cache apt lib
+        id: cache-apt-lib
+        uses: actions/cache@v3
+        with:
+          path: |
+            var-lib-apt-${{ matrix.slug }}
+          key: var-lib-apt-${{ matrix.slug }}
+      - name: inject cache into docker
+        uses: reproducible-containers/buildkit-cache-dance@v3.1.0
+        with:
+          cache-map: |
+            {
+              ".cargo/registry": "/usr/local/cargo/registry",
+              ".cargo/git/db": "/usr/local/cargo/git/db",
+              "cargo-target-${{ matrix.slug }}": {
+                "target": "/app/target",
+                "id": "cargo-target-${{ matrix.platform }}"
+              },
+              "var-cache-apt-${{ matrix.slug }}": "/var/cache/apt",
+              "var-lib-apt-${{ matrix.slug }}": "/var/lib/apt"
+            }
+          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
+
+
+      # We get the git commit timestamp, to use for reproducible builds (SOURCE_DATE_EPOCH)
+      - name: Get Git commit timestamps
+        run: echo "TIMESTAMP=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
+      # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
+      # It will not push images generated from a pull request
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.TIMESTAMP }}
+
+      # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see "[Using artifact attestations to establish provenance for builds](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)." 
+      - name: Generate artifact attestation (${{ needs.define-variables.outputs.docker_image }})
+        if: env.DOCKER_HUB_ENABLED == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: index.${{ needs.define-variables.outputs.docker_image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Generate artifact attestation (${{ needs.define-variables.outputs.ghcr_image }})
+        if: env.GHCR_ENABLED == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ needs.define-variables.outputs.ghcr_image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
