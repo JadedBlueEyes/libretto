@@ -31,3 +31,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 [features]
 
 bundled = ["matrix-sdk/bundled-sqlite", "reqwest/native-tls-vendored"] # jiff?
+
+[lints.rust]
+# still refactoring
+dead_code = "allow"
