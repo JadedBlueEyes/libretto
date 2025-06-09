@@ -478,7 +478,6 @@ async fn run(
             Ok(response) => {
                 // This is the last time we need to provide this token, the sync method after
                 // will handle it on its own.
-                sync_settings = sync_settings.token(response.next_batch.clone());
                 persist_sync_token(session_file, response.next_batch).await?;
                 break;
             }

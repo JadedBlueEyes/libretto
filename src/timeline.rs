@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use color_eyre::eyre;
-use futures::prelude::*;
 use ruma::{
     MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId, RoomId,
     events::{
@@ -62,10 +61,10 @@ pub async fn build_timeline_item(
             messagelike_to_content(any_sync_message_like_event).await
         }
         AnySyncTimelineEvent::State(state_event) => {
-            Ok(TimelineItemContent::OtherState(OtherState {
+            Ok(TimelineItemContent::OtherState(Box::new(OtherState {
                 state_key: state_event.state_key().to_string(),
                 content: state_event.content(),
-            }))
+            })))
         }
     }
 }
@@ -165,7 +164,7 @@ pub enum TimelineItemContent {
     // ProfileChange(MemberProfileChange),
 
     /// Another state event.
-    OtherState(OtherState),
+    OtherState(Box<OtherState>),
 
     /// A message-like event that failed to deserialize.
     FailedToParseMessageLike {
