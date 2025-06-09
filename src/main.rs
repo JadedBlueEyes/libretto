@@ -235,11 +235,12 @@ async fn room(
 
     let Messages {
         end: token,
-        chunk: events,
+        chunk: mut events,
         ..
     } = room
         .messages(assign!(MessagesOptions::backward(), {limit: 100u8.into()}))
         .await?;
+    events.reverse();
 
     // let paginator = Paginator::new(room.clone());
     // paginator.start_from(event_id, num_events)
@@ -423,17 +424,20 @@ async fn verify_device(encryption: Encryption, recovery_key: Option<String>) -> 
             device.device_id(),
             device.user_id(),
         );
-        let recovery_key = recovery_key.unwrap_or_else(|| {
+        let recovery_key = recovery_key.or_else(|| {
             println!("Type recovery key for the bot (characters won't show up as you type them)");
-            match prompt_password("Recovery Key: ") {
-                Ok(p) => p,
-                Err(err) => {
-                    panic!("FATAL: failed to get recovery key: {err}");
-                }
-            }
+            prompt_password("Recovery Key: ").ok()
         });
-        info!("Trying to recover device");
-        encryption.recovery().recover(&recovery_key).await?;
+        if let Some(recovery_key) = recovery_key {
+            info!("Trying to recover device");
+            let _ = encryption
+                .recovery()
+                .recover(&recovery_key)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to recover device: {e}");
+                });
+        }
     }
     encryption.wait_for_e2ee_initialization_tasks().await;
     Ok(())
