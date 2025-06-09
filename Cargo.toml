@@ -18,6 +18,7 @@ listenfd = "1.0.2"
 matrix-sdk = { version = "0.11.0", features = ["eyre"] }
 rand = "0.9.0"
 regex = "1.11.1"
+reqwest = "0.12.19"
 rpassword = "7.4.0"
 ruma = { version = "0.12.2", features = ["html-matrix", "html"] }
 serde = { version = "1.0.219", features = ["derive"] }
@@ -26,3 +27,7 @@ tokio = { version = "1.44.2", features = ["rt", "signal"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+[features]
+
+bundled = ["matrix-sdk/bundled-sqlite", "reqwest/native-tls-vendored"] # jiff?
