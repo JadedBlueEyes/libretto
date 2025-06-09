@@ -58,7 +58,10 @@ jobs:
         include:
           - slug: linux-amd64
             platform: linux/amd64
-            
+    env:
+      DOCKER_HUB_ENABLED: ${{ (vars.DOCKER_HUB_REPO_NAME != '') && (secrets.DOCKER_HUB_USERNAME != '') && (secrets.DOCKER_HUB_PASSWORD != '') && 'true' || 'false' }}
+      GHCR_ENABLED: "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && 'true' || 'false' }}"
+      DOCKER_HUB_REPO_NAME: ${{vars.DOCKER_HUB_REPO_NAME || ''}}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
