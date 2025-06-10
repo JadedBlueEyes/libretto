@@ -1,6 +1,7 @@
 const directRoomsBtn = document.getElementById("direct-rooms");
 const encryptedRoomsBtn = document.getElementById("encrypted-rooms");
 const unreadRoomsBtn = document.getElementById("unread-rooms");
+const roomSearch = document.getElementById("room-search");
 const roomCards = document.querySelectorAll(".room-card");
 
 // Filter states: null (disabled), true (enabled), false (inverted)
@@ -8,6 +9,7 @@ const filters = {
 	direct: null,
 	encrypted: null,
 	unread: null,
+	search: "",
 };
 
 // Add CSS classes to buttons based on filter state
@@ -24,10 +26,18 @@ function checkFilter(filter, value) {
 
 function applyFilters() {
 	for (const card of roomCards) {
+		const roomName = () =>
+			card.querySelector(".room-name").textContent.toLowerCase();
+		const matchesSearch = () =>
+			filters.search === "" ||
+			roomName().includes(filters.search.toLowerCase());
+
 		const showCard =
 			checkFilter(filters.direct, card.dataset.isDirect === "true") &&
 			checkFilter(filters.encrypted, card.dataset.isEncrypted === "true") &&
-			checkFilter(filters.unread, card.dataset.hasUnread === "true");
+			checkFilter(filters.unread, card.dataset.hasUnread === "true") &&
+			matchesSearch();
+
 		// Show or hide the card
 		card.style.display = showCard ? "flex" : "none";
 	}
@@ -58,4 +68,10 @@ encryptedRoomsBtn.addEventListener("click", () => {
 
 unreadRoomsBtn.addEventListener("click", () => {
 	toggleFilter("unread", unreadRoomsBtn);
+});
+
+// Set up event listener for search input
+roomSearch.addEventListener("input", (e) => {
+	filters.search = e.target.value;
+	applyFilters();
 });

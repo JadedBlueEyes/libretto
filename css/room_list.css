@@ -43,6 +43,24 @@
 	flex-wrap: wrap;
 }
 
+.search-container {
+	margin-left: auto;
+	flex-grow: 1;
+	max-width: 300px;
+	min-width: 150px;
+}
+
+#room-search {
+	width: 100%;
+	padding: 0.5rem 1rem;
+	border: 1px solid var(--room-card-hover-background);
+	border-radius: var(--room-card-border-radius);
+	background-color: var(--room-card-background);
+	font-family: var(--font-stack);
+	color: var(--text-color);
+	box-sizing: border-box;
+}
+
 .room-list-filters button {
 	padding: 0.5rem 1rem;
 	background-color: var(--room-card-background);
