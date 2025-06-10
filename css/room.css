@@ -1,7 +1,8 @@
 :root {
 	color-scheme: light;
-	--font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-		Arial, sans-serif;
+	--font-stack:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+		sans-serif;
 
 	--background-color: #fff;
 	--text-color: #000;
@@ -17,7 +18,7 @@
 		--secondary-text-color: #888;
 	}
 
-	--timeline-vertical-padding: .2rem;
+	--timeline-vertical-padding: 0.2rem;
 	--timeline-horizontal-padding: 1rem;
 	--avatar-size: 2.5rem;
 	--avatar-gap: 0.25rem;
@@ -63,7 +64,7 @@ div.timeline-event {
 		"avatar avatar-gap content content";
 
 	&:target {
-		background-color: oklab( from yellow 0.4 a b);
+		background-color: oklab(from yellow 0.4 a b);
 	}
 
 	.sender-profile {
@@ -114,16 +115,15 @@ div.timeline-event {
         } */
 }
 
-
 pre {
 	width: 100%;
-	max-height: max(50vh,400px);
+	max-height: max(50vh, 400px);
 	overflow: auto;
-	padding-bottom: .5rem;
+	padding-bottom: 0.5rem;
 }
 
 .formatted-body {
 	span[data-mx-color] {
-		color: attr(data-mx-color type(<color>))
+		color: attr(data-mx-color type(<color>));
 	}
 }

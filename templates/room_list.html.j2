@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Libretto - Room List</title>
+    <style>
+        /*<![CDATA[*/
+            {{ include_str!("../css/room.css") | safe}}
+            {{ include_str!("../css/room_list.css") | safe}}
+        /*]]>*/
+    </style>
+</head>
+<body>
+    <div class="room-list-container">
+        <div class="room-list-header">
+            <h1>Libretto</h1>
+            <p>Your Matrix rooms</p>
+        </div>
+        
+        <div class="room-list-filters">
+            <button id="direct-rooms" class="filter-button">Direct Messages</button>
+            <button id="encrypted-rooms" class="filter-button">Encrypted Rooms</button>
+            <button id="unread-rooms" class="filter-button">Unread Rooms</button>
+        </div>
+        
+        <div class="room-grid">
+            {% for room in rooms %}
+            <a href="/room/{{ room.id | urlencode }}" class="room-card" 
+               data-is-direct="{{ room.is_direct }}" 
+               data-is-encrypted="{{ room.is_encrypted }}"
+               data-has-unread="{{ room.has_unread() }}">
+                <div class="room-indicators">
+                    {% if room.is_encrypted %}
+                    <div class="room-indicator encrypted-indicator" title="Encrypted Room">
+                        🔒
+                    </div>
+                    {% endif %}
+                    {% if room.is_direct %}
+                    <div class="room-indicator direct-indicator" title="Direct Message">
+                        👤
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="room-card-header">
+                    <div class="room-avatar">
+
+                        {% if let Some(avatar_url) = room.avatar_url %}
+                        <img src="{{ avatar_url.to_string() }}" alt="{{ room.name.to_string() }}">
+                        {% else %}
+                        {{ room.name_initial() }}
+                        {% endif %}
+                    </div>
+                    <h3 class="room-name">{{ room.name.to_string() }}</h3>
+                </div>
+                {% if room.has_unread() %}
+                <div class="room-unread-count">
+                    {{ room.unread_count }}
+                </div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        const directRoomsBtn = document.getElementById('direct-rooms');
+        const encryptedRoomsBtn = document.getElementById('encrypted-rooms');
+        const unreadRoomsBtn = document.getElementById('unread-rooms');
+        const roomCards = document.querySelectorAll('.room-card');
+        
+        // Filter states: null (disabled), true (enabled), false (inverted)
+        const filters = {
+            direct: null,
+            encrypted: null,
+            unread: null
+        };
+        
+        // Add CSS classes to buttons based on filter state
+        function updateButtonStyles(btn, filter) {
+            btn.classList.remove('active', 'inverted');
+            if (filter === true) btn.classList.add('active');
+            if (filter === false) btn.classList.add('inverted');
+        }
+
+        function checkFilter(filter, value) {
+            if (filter === null) return true;
+            return filter === value;
+        }
+
+        function applyFilters() {
+            roomCards.forEach(card => {
+                let showCard = checkFilter(filters.direct, card.dataset.isDirect === 'true') &&
+                    checkFilter(filters.encrypted, card.dataset.isEncrypted === 'true') &&
+                    checkFilter(filters.unread, card.dataset.hasUnread === 'true');
+                // Show or hide the card
+                card.style.display = showCard ? 'flex' : 'none';
+            });
+        }
+        
+        // Toggle filter state: null -> true -> false -> null
+        function toggleFilter(filterName, btn) {
+            if (filters[filterName] === null) {
+                filters[filterName] = true; // Enable filter
+            } else if (filters[filterName] === true) {
+                filters[filterName] = false; // Invert filter
+            } else {
+                filters[filterName] = null; // Disable filter
+            }
+            
+            updateButtonStyles(btn, filters[filterName]);
+            applyFilters();
+        }
+        
+        // Set up event listeners for filter buttons
+        directRoomsBtn.addEventListener('click', function() {
+            toggleFilter('direct', directRoomsBtn);
+        });
+        
+        encryptedRoomsBtn.addEventListener('click', function() {
+            toggleFilter('encrypted', encryptedRoomsBtn);
+        });
+
+        unreadRoomsBtn.addEventListener('click', function() {
+            toggleFilter('unread', unreadRoomsBtn);
+        });
+    </script>
+</body>
+</html>

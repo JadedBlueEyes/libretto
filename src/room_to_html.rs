@@ -6,6 +6,12 @@ use ruma::events::room::message::{FormattedBody, MessageType};
 use crate::timeline::{MsgLikeKind, TimelineEvent, TimelineItemContent};
 
 #[derive(askama::Template)]
+#[template(path = "room_list.html.j2")]
+pub struct RoomListTemplate {
+    pub rooms: Vec<crate::room_list::RoomListEntry>,
+}
+
+#[derive(askama::Template)]
 #[template(path = "room.html.j2")]
 pub struct RoomTemplate<'a> {
     pub room_id: &'a matrix_sdk::ruma::RoomId,

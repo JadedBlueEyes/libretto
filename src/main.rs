@@ -1,3 +1,4 @@
+mod room_list;
 mod room_to_html;
 mod timeline;
 
@@ -36,6 +37,8 @@ use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use ruma::OwnedRoomId;
+
+use crate::room_list::room_to_list_entry;
 
 #[derive(Parser, Debug)]
 pub struct Config {
@@ -145,6 +148,7 @@ async fn main() -> eyre::Result<()> {
 
     let app = axum::Router::new()
         .route("/room/{room_id}", get(room))
+        .route("/", get(index))
         .with_state(client.clone());
 
     // try to first get a socket from listenfd, if that does not give us
@@ -210,6 +214,23 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
+
+async fn index(
+    extract::State(client): extract::State<Client>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    let mut list = room_list::RoomList::new();
+    for room in client.joined_rooms() {
+        if let Ok(room_entry) = room_to_list_entry(&room).await {
+            list.add_room(room_entry);
+        }
+    }
+
+    list.sort_by_display_names();
+
+    let template = room_to_html::RoomListTemplate { rooms: list.rooms };
+
+    Ok(axum::response::Html(template.render()?).into_response())
 }
 
 async fn room(
