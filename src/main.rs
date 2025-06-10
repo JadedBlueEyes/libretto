@@ -4,7 +4,8 @@ mod timeline;
 
 use std::path::{Path, PathBuf};
 
-use axum::{extract, response::IntoResponse, routing::get};
+use axum::{extract, http, response::IntoResponse, routing::get};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use color_eyre::eyre::{self, Context, ContextCompat};
 
 use futures::{StreamExt, prelude::*};
@@ -29,6 +30,7 @@ use matrix_sdk::{
 use rand::{Rng, distr::Alphanumeric};
 use room_to_html::RoomTemplate;
 use rpassword::prompt_password;
+use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 use timeline::build_timeline_event;
 use tokio::{fs, signal};
@@ -39,6 +41,45 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use ruma::OwnedRoomId;
 
 use crate::room_list::room_to_list_entry;
+
+#[derive(Embed)]
+#[folder = "dist"]
+#[exclude = ".vite"]
+struct Dist;
+
+#[derive(Embed)]
+#[folder = "dist/.vite"]
+struct DistVite;
+
+impl DistVite {
+    fn get_manifest() -> vite_manifest::Manifest {
+        let data = Self::get("manifest.json").expect("Failed to get vite manifest");
+        serde_json::from_slice(data.data.as_ref()).expect("Failed to parse vite manifest")
+    }
+}
+
+impl DistVite {
+    fn get_html_tags_for_asset<F: rust_embed::Embed>(path: &str) -> String {
+        let manifest = Self::get_manifest();
+        manifest.imported_chunks(path)
+        .into_iter()
+        .chain([manifest.manifest().get(path).expect("Asset to exist").to_owned()])
+        .map(|chunk| {
+            let path = chunk.file;
+            let file = F::get(&path)
+                .expect("Failed to get asset from embed");
+            let hash = BASE64_STANDARD.encode(file.metadata.sha256_hash());
+            match file.metadata.mimetype() {
+                "application/javascript" if path.ends_with(".mjs") => format!("<script type=\"module\" src=\"/{path}\" integrity=\"sha256-{hash}\"></script>"),
+                "application/javascript" => format!("<script src=\"/{path}\" integrity=\"sha256-{hash}\"></script>"),
+                "text/css" => format!("<link rel=\"stylesheet\" href=\"/{path}\" integrity=\"sha256-{hash}\">"),
+                _ => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+    }
+}
 
 #[derive(Parser, Debug)]
 pub struct Config {
@@ -149,6 +190,7 @@ async fn main() -> eyre::Result<()> {
     let app = axum::Router::new()
         .route("/room/{room_id}", get(room))
         .route("/", get(index))
+        .fallback(get(static_service::<Dist>))
         .with_state(client.clone());
 
     // try to first get a socket from listenfd, if that does not give us
@@ -190,6 +232,18 @@ async fn main() -> eyre::Result<()> {
         .await?;
     sync_task.await?;
     Ok(())
+}
+
+async fn static_service<F: rust_embed::Embed>(uri: http::Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+
+    match F::get(path) {
+        Some(content) => {
+            let mime = content.metadata.mimetype();
+            ([(http::header::CONTENT_TYPE, mime)], content.data).into_response()
+        }
+        None => handle_404().await.into_response(),
+    }
 }
 
 async fn shutdown_signal() {
@@ -581,4 +635,8 @@ async fn persist_sync_token(session_file: &Path, sync_token: String) -> eyre::Re
     fs::write(session_file, serialized_session).await?;
 
     Ok(())
+}
+
+async fn handle_404() -> (http::StatusCode, &'static str) {
+    (http::StatusCode::NOT_FOUND, "Not found")
 }

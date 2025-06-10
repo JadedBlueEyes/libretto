@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 askama = { version = "0.13.1", features = ["serde_json"] }
 axum = "0.8.4"
+base64 = "0.22.1"
 clap = { version = "4.5.36", features = ["derive", "env"] }
 clap-verbosity-flag = "3.0.2"
 color-eyre = "0.6.5"
@@ -21,12 +22,14 @@ regex = "1.11.1"
 reqwest = "0.12.19"
 rpassword = "7.4.0"
 ruma = { version = "0.12.2", features = ["html-matrix", "html"] }
+rust-embed = { version = "8.7.2", features = ["axum", "compression", "mime-guess", "include-exclude"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.44.2", features = ["rt", "signal"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+vite-manifest = "0.1.0"
 
 [features]
 

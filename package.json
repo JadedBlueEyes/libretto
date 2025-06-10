@@ -1,0 +1,19 @@
+{
+	"name": "libretto",
+	"version": "0.0.0",
+	"description": "",
+	"main": "",
+	"scripts": {
+		"build": "vite build",
+		"watch": "vite build --watch"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "",
+	"packageManager": "pnpm@10.8.0",
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"typescript": "^5.8.3",
+		"vite": "^6.3.5"
+	}
+}

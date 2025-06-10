@@ -6,7 +6,7 @@
     <title>Room - {{ name }}</title>
     <style>
         /*<![CDATA[*/
-            {{ include_str!("../css/room.css") | safe}}
+            {{ String::from_utf8_lossy(crate::Dist::get("room.css").unwrap().data) | safe}}
         /*]]>*/
     </style>
 </head>
