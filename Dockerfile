@@ -1,6 +1,18 @@
 ARG RUST_VERSION=1
 ARG DEBIAN_VERSION=bookworm
 
+FROM --platform=$BUILDPLATFORM node:22-slim AS web
+
+RUN corepack enable
+
+WORKDIR /app
+COPY pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm fetch --frozen-lockfile
+COPY package.json ./
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+
 FROM --platform=$BUILDPLATFORM docker.io/tonistiigi/xx AS xx
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-slim-${DEBIAN_VERSION} AS base
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-slim-${DEBIAN_VERSION} AS toolchain
@@ -129,16 +141,13 @@ FROM toolchain AS builder
 
 # Get source
 COPY . .
+# Copy web assets
+COPY --from=web /app/dist /app/dist
 
 ARG TARGETPLATFORM
 
 # Verify environment configuration
 RUN xx-cargo --print-target-triple
-
-# Build web assets
-
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-RUN pnpm run build
 
 # Build the binary
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

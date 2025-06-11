@@ -53,6 +53,9 @@ jobs:
             ~/.cargo/registry
             !~/.cargo/registry/src
           key: rust-registry-${{hashFiles('**/Cargo.lock') }}
+
+
+      - uses: pnpm/action-setup@v4
       - run: pnpm i --frozen-lockfile
       - run: pnpm run build
 
@@ -104,7 +107,10 @@ jobs:
             ~/.cargo/registry
             !~/.cargo/registry/src
           key: rust-registry-${{hashFiles('**/Cargo.lock') }}
-      
+
+
+
+      - uses: pnpm/action-setup@v4
       - run: pnpm i --frozen-lockfile
       - run: pnpm run build
 
