@@ -135,6 +135,10 @@ ARG TARGETPLATFORM
 # Verify environment configuration
 RUN xx-cargo --print-target-triple
 
+# Build web assets
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm run build
 
 # Build the binary
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

@@ -53,6 +53,8 @@ jobs:
             ~/.cargo/registry
             !~/.cargo/registry/src
           key: rust-registry-${{hashFiles('**/Cargo.lock') }}
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm run build
 
       - name: Clippy
         run: |
@@ -102,6 +104,9 @@ jobs:
             ~/.cargo/registry
             !~/.cargo/registry/src
           key: rust-registry-${{hashFiles('**/Cargo.lock') }}
+      
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm run build
 
       - name: Cargo Test
         run: |
