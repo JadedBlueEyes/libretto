@@ -1,4 +1,8 @@
-use icu::{calendar::Gregorian, datetime::TypedDateTimeFormatter, locid::locale};
+use icu::calendar::{AnyCalendar, AnyCalendarKind, Iso};
+use icu::datetime::fieldsets;
+use icu::datetime::input::{Date as IcuDate, DateTime as IcuDateTime, Time as IcuTime};
+use icu::datetime::scaffold::ConvertCalendar;
+use icu::{datetime::DateTimeFormatter, locale::locale};
 use jiff::Timestamp;
 use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
 use ruma::events::room::message::{FormattedBody, MessageType};
@@ -70,27 +74,29 @@ pub(crate) fn milliseconds_since_unix_epoch_to_string(milliseconds: i64) -> Stri
 }
 
 pub(crate) fn milliseconds_since_unix_epoch_to_format_string(milliseconds: i64) -> String {
-    let formatter =
-        TypedDateTimeFormatter::try_new(&locale!("en-GB").into(), Default::default()).unwrap();
+    let field_set_with_options = fieldsets::YMD::long().with_time_hm();
+    let locale = locale!("en-GB");
+    let calendar = AnyCalendar::new(AnyCalendarKind::new(locale.clone().into()));
+
+    let formatter: DateTimeFormatter<_> =
+        DateTimeFormatter::try_new(locale.into(), field_set_with_options).unwrap();
     Timestamp::from_millisecond(milliseconds).map_or_else(
         |_| "Unknown Time".to_string(),
         |ts| {
             formatter
                 .format(
                     &convert_from_datetime(ts.in_tz("UTC").unwrap().datetime())
-                        .to_calendar(Gregorian),
+                        .to_calendar(&calendar),
                 )
                 .to_string()
         },
     )
 }
 
-use icu::calendar::{Date as IcuDate, DateTime as IcuDateTime, Iso, Time as IcuTime};
-
 fn convert_from_datetime(v: jiff::civil::DateTime) -> IcuDateTime<Iso> {
     let date: IcuDate<Iso> = convert_from_date(v.date());
     let time: IcuTime = convert_from_time(v.time());
-    IcuDateTime::new(date, time)
+    IcuDateTime { date, time }
 }
 
 fn convert_from_date(v: jiff::civil::Date) -> IcuDate<Iso> {
@@ -98,7 +104,7 @@ fn convert_from_date(v: jiff::civil::Date) -> IcuDate<Iso> {
     let month = v.month().unsigned_abs();
     let day = v.day().unsigned_abs();
     // All Jiff civil dates are valid ICU4X dates.
-    IcuDate::try_new_iso_date(year, month, day).unwrap()
+    IcuDate::try_new_iso(year, month, day).unwrap()
 }
 fn convert_from_time(v: jiff::civil::Time) -> IcuTime {
     let hour = v.hour().unsigned_abs();
