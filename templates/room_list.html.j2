@@ -17,7 +17,7 @@
             <h1>Libretto</h1>
             <p>Your Matrix rooms</p>
         </div>
-        
+
         <div class="room-list-filters">
             <button id="direct-rooms" class="filter-button">Direct Messages</button>
             <button id="encrypted-rooms" class="filter-button">Encrypted Rooms</button>
@@ -26,11 +26,11 @@
                 <input type="text" id="room-search" placeholder="Filter rooms...">
             </div>
         </div>
-        
+
         <div class="room-grid">
             {% for room in rooms %}
-            <a href="/room/{{ room.id | urlencode }}" class="room-card" 
-               data-is-direct="{{ room.is_direct }}" 
+            <a href="/room/{{ room.id | urlencode }}" class="room-card"
+               data-is-direct="{{ room.is_direct }}"
                data-is-encrypted="{{ room.is_encrypted }}"
                data-has-unread="{{ room.has_unread() }}">
                 <div class="room-indicators">
@@ -45,7 +45,7 @@
                     </div>
                     {% endif %}
                 </div>
-                
+
                 <div class="room-card-header">
                     <div class="room-avatar">
 
