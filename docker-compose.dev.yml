@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: libretto-postgres-dev
+    environment:
+      POSTGRES_DB: libretto_dev
+      POSTGRES_USER: libretto
+      POSTGRES_PASSWORD: libretto_dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U libretto -d libretto_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  libretto:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+    container_name: libretto-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/target
+      - /root/.cache
+      - cargo_registry_cache:/usr/local/cargo/registry
+      - ${LIBRETTO_DATA_MOUNT:-libretto_data}:/libretto
+    environment:
+      - DATABASE_URL=postgresql://libretto:libretto_dev_password@postgres:5432/libretto_dev
+      - MATRIX_ACCOUNT_DATA_DIR=/libretto
+      - MATRIX_SERVER=${MATRIX_SERVER}
+      - MATRIX_USERNAME=${MATRIX_USERNAME}
+      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      - MATRIX_ACCOUNT_RECOVERY_KEY=${MATRIX_ACCOUNT_RECOVERY_KEY}
+      - RUST_LOG=${RUST_LOG}
+    working_dir: /app
+
+volumes:
+  postgres_data:
+  cargo_registry_cache:
+  libretto_data:
