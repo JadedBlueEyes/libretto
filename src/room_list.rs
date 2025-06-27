@@ -3,7 +3,7 @@ use matrix_sdk::{Room, RoomDisplayName, RoomState};
 use ruma::{OwnedRoomId, RoomId};
 use serde::{Deserialize, Serialize};
 
-use crate::AppError;
+use crate::error::AppError;
 
 /// Represents a room in the room list with additional metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

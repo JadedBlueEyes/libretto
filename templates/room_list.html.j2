@@ -6,10 +6,10 @@
     <title>Libretto - Room List</title>
     <style>
         /*<![CDATA[*/
-            {{ String::from_utf8_lossy(crate::Dist::get("room_list.css").unwrap().data) | safe}}
+            {{ String::from_utf8_lossy(crate::assets::Dist::get("room_list.css").unwrap().data) | safe}}
         /*]]>*/
     </style>
-    {{ crate::DistVite::get_html_tags_for_asset::<crate::Dist>("js/room_list.js") | safe }}
+    {{ crate::assets::DistVite::get_html_tags_for_asset::<crate::assets::Dist>("js/room_list.js") | safe }}
 </head>
 <body>
     <div class="room-list-container">
