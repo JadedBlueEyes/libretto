@@ -16,7 +16,7 @@ futures-util = "0.3.31"
 icu = "2.0.0"
 jiff = "0.2.15"
 listenfd = "1.0.2"
-matrix-sdk = { version = "0.12.0", features = ["eyre"] }
+matrix-sdk = { version = "0.12.0", features = ["eyre", "native-tls"], default-features = false}
 rand = "0.9.1"
 regex = "1.11.1"
 reqwest = "0.12.19"
@@ -25,7 +25,7 @@ ruma = { version = "0.12.3", features = ["html-matrix", "html"] }
 rust-embed = { version = "8.7.2", features = ["axum", "mime-guess", "include-exclude"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", ] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate"] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
 tokio = { version = "1.45.1", features = ["rt", "signal"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"
@@ -34,7 +34,8 @@ vite-manifest = "0.1.0"
 
 [features]
 
-bundled = ["matrix-sdk/bundled-sqlite", "reqwest/native-tls-vendored"] # jiff timezone database?
+# "matrix-sdk/bundled-sqlite",
+bundled = ["reqwest/native-tls-vendored"] # jiff timezone database?
 
 [lints.rust]
 # still refactoring

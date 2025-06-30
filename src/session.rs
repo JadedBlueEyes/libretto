@@ -13,6 +13,7 @@ pub struct ClientSession {
     pub homeserver: String,
 
     /// The path of the database.
+    /// Relative to
     pub db_path: PathBuf,
 
     /// The passphrase of the database.
@@ -55,7 +56,7 @@ pub async fn restore_session(session_file: &Path) -> eyre::Result<(Client, Optio
     // Build the client with the previous settings from the session.
     let client = Client::builder()
         .homeserver_url(client_session.homeserver)
-        .sqlite_store(client_session.db_path, Some(&client_session.passphrase))
+        // .sqlite_store(client_session.db_path, Some(&client_session.passphrase))
         .build()
         .await?;
 

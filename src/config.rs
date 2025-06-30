@@ -7,6 +7,9 @@ pub struct Config {
     #[clap(flatten)]
     pub account_config: AccountConfig,
 
+    #[arg(long, env = "DATABASE_URL")]
+    pub database_url: String,
+
     #[clap(flatten)]
     pub(crate) verbose: clap_verbosity_flag::Verbosity,
 }

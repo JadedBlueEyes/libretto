@@ -1,5 +1,7 @@
 use color_eyre::eyre::{self};
-use matrix_sdk::{Client, encryption::Encryption};
+use matrix_sdk::Client;
+#[cfg(false)]
+use matrix_sdk::encryption::Encryption;
 use rand::Rng;
 use rand::distr::Alphanumeric;
 use rpassword::prompt_password;
@@ -32,7 +34,7 @@ pub async fn login(
 
     let client = Client::builder()
         .homeserver_url(&config.server)
-        .sqlite_store(&db_path, Some(&passphrase))
+        // .sqlite_store(&db_path, Some(&passphrase))
         .build()
         .await?;
 
@@ -73,6 +75,7 @@ pub async fn login(
         }
     }
 
+    #[cfg(false)]
     verify_device(client.encryption(), config.recovery_key.clone()).await?;
 
     // Persist the session to reuse it later.
@@ -91,6 +94,7 @@ pub async fn login(
     Ok(client)
 }
 
+#[cfg(false)]
 pub async fn verify_device(
     encryption: Encryption,
     recovery_key: Option<String>,

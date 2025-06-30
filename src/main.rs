@@ -12,7 +12,8 @@ mod session;
 
 use crate::config::Config;
 use clap::Parser;
-use color_eyre::eyre;
+use color_eyre::eyre::{self, Context};
+use sqlx::postgres::PgPoolOptions;
 use tracing::info;
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -32,6 +33,17 @@ async fn main() -> eyre::Result<()> {
         .init();
 
     info!("Starting up");
+
+    let db = PgPoolOptions::new()
+        .max_connections(20)
+        .connect(&config.database_url)
+        .await
+        .context("Failed to connect to database")?;
+
+    sqlx::migrate!()
+        .run(&db)
+        .await
+        .context("failed to run migrations")?;
 
     let data_dir = config.account_config.data_dir.clone().unwrap_or_else(|| {
         dirs::data_dir()

@@ -6,7 +6,6 @@ use axum::{
 use color_eyre::eyre;
 use futures::StreamExt;
 use matrix_sdk::Client;
-use tracing::error;
 
 use crate::error::AppError;
 use crate::room_to_html::{RoomListTemplate, RoomTemplate};
@@ -60,13 +59,14 @@ pub async fn room(
             .expect("Room ID was not a valid ID or alias!")
     };
 
+    #[cfg(false)]
     client
         .encryption()
         .backups()
         .download_room_keys_for_room(&room_id)
         .await
         .inspect_err(|e| {
-            error!("Failed to download room keys for room {room_id}: {e}");
+            tracing::error!("Failed to download room keys for room {room_id}: {e}");
         })?;
 
     let room = client
