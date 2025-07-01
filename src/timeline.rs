@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use color_eyre::eyre;
-use ruma::{
+use matrix_sdk::ruma::{
     MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId, RoomId,
     events::{
         AnyFullStateEventContent, AnySyncMessageLikeEvent, AnySyncTimelineEvent, StateEventType,
@@ -244,7 +244,7 @@ impl Message {
         edit: Option<RoomMessageEventContentWithoutRelation>,
     ) -> Self {
         msgtype.sanitize(
-            ruma::html::HtmlSanitizerMode::Compat,
+            matrix_sdk::ruma::html::HtmlSanitizerMode::Compat,
             RemoveReplyFallback::Yes,
         );
         let mut msg = Self {

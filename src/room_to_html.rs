@@ -5,7 +5,7 @@ use icu::datetime::scaffold::ConvertCalendar;
 use icu::{datetime::DateTimeFormatter, locale::locale};
 use jiff::Timestamp;
 use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
-use ruma::events::room::message::{FormattedBody, MessageType};
+use matrix_sdk::ruma::events::room::message::{FormattedBody, MessageType};
 
 use crate::timeline::{MsgLikeKind, TimelineEvent, TimelineItemContent};
 

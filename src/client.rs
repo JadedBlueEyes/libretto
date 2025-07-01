@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use color_eyre::eyre;
+use matrix_sdk::ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use matrix_sdk::{Client, config::SyncSettings};
-use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use tracing::{info, trace, warn};
 
 use crate::config::Config;

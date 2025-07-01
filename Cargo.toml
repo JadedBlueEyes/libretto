@@ -16,16 +16,16 @@ futures-util = "0.3.31"
 icu = "2.0.0"
 jiff = "0.2.15"
 listenfd = "1.0.2"
-matrix-sdk = { version = "0.12.0", features = ["eyre", "native-tls"], default-features = false}
+matrix-sdk = { git = "https://github.com/JadedBlueEyes/matrix-rust-sdk.git", rev="d54a3ed4001202d58044db84c78a653b542db01d", features = ["eyre", "native-tls"], default-features = true}
 rand = "0.9.1"
 regex = "1.11.1"
 reqwest = "0.12.19"
 rpassword = "7.4.0"
-ruma = { version = "0.12.3", features = ["html-matrix", "html"] }
+ruma = { git = "https://github.com/ruma/ruma", rev = "d1d53e2b7aaf9190f11a5465b9edf6a19fc5b59a", features = ["html-matrix", "html"] } # match rust-sdk
 rust-embed = { version = "8.7.2", features = ["axum", "mime-guess", "include-exclude"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate"] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
+sqlx = { git = "https://github.com/JadedBlueEyes/sqlx.git", branch="jade/update-sqlite", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate"] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
 tokio = { version = "1.45.1", features = ["rt", "signal"] }
 tracing = "0.1.41"
 tracing-log = "0.2.0"

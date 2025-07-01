@@ -1,6 +1,6 @@
 // filepath: /Users/jade/Code/libretto/src/room_list.rs
+use matrix_sdk::ruma::{OwnedRoomId, RoomId};
 use matrix_sdk::{Room, RoomDisplayName, RoomState};
-use ruma::{OwnedRoomId, RoomId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
