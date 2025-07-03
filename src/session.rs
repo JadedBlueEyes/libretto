@@ -1,10 +1,11 @@
 use std::path::Path;
-use std::path::PathBuf;
 
 use color_eyre::eyre;
 use matrix_sdk::{Client, authentication::matrix::MatrixSession};
+use ruma::UserId;
 use serde::{Deserialize, Serialize};
-use tokio::fs;
+
+use crate::DatabasePool;
 
 /// The data needed to re-build a client.
 #[derive(Debug, Serialize, Deserialize)]
@@ -13,8 +14,8 @@ pub struct ClientSession {
     pub homeserver: String,
 
     /// The path of the database.
-    /// Relative to
-    pub db_path: PathBuf,
+    /// Relative to the data directory
+    pub db_path: String,
 
     /// The passphrase of the database.
     pub passphrase: String,
@@ -39,24 +40,23 @@ pub struct FullSession {
 }
 
 /// Restore a previous session from a file.
-pub async fn restore_session(session_file: &Path) -> eyre::Result<(Client, Option<String>)> {
-    tracing::info!(
-        "Previous session found in '{}'",
-        session_file.to_string_lossy()
-    );
-
-    // The session was serialized as JSON in a file.
-    let serialized_session = fs::read_to_string(session_file).await?;
+pub async fn restore_session(
+    session: FullSession,
+    data_dir: &Path,
+) -> eyre::Result<(Client, Option<String>)> {
     let FullSession {
         client_session,
         user_session,
         sync_token,
-    } = serde_json::from_str(&serialized_session)?;
+    } = session;
 
     // Build the client with the previous settings from the session.
     let client = Client::builder()
         .homeserver_url(client_session.homeserver)
-        // .sqlite_store(client_session.db_path, Some(&client_session.passphrase))
+        .sqlite_store(
+            data_dir.join(&client_session.db_path),
+            Some(&client_session.passphrase),
+        )
         .build()
         .await?;
 
@@ -71,13 +71,18 @@ pub async fn restore_session(session_file: &Path) -> eyre::Result<(Client, Optio
 /// Persist the sync token for a future session.
 /// Note that this is needed only when using `sync_once`. Other sync methods get
 /// the sync token from the store.
-pub async fn persist_sync_token(session_file: &Path, sync_token: String) -> eyre::Result<()> {
-    let serialized_session = fs::read_to_string(session_file).await?;
-    let mut full_session: FullSession = serde_json::from_str(&serialized_session)?;
-
-    full_session.sync_token = Some(sync_token);
-    let serialized_session = serde_json::to_string(&full_session)?;
-    fs::write(session_file, serialized_session).await?;
+pub async fn persist_sync_token(
+    database: DatabasePool,
+    user_id: &UserId,
+    sync_token: String,
+) -> eyre::Result<()> {
+    sqlx::query!(
+        r#"UPDATE "account" SET next_batch = $1 WHERE user_id = $2"#,
+        sync_token,
+        user_id.to_string()
+    )
+    .execute(&database)
+    .await?;
 
     Ok(())
 }

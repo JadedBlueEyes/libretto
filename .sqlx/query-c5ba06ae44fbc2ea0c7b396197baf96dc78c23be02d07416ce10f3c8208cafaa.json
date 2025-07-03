@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select user_id,\n        device_id,\n        access_token,\n        refresh_token,\n        homeserver_url,\n        db_path,\n        db_passphrase,\n        next_batch\n        from \"account\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "access_token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "access_token"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "refresh_token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "refresh_token"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "homeserver_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "homeserver_url"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "db_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "db_path"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "db_passphrase",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "db_passphrase"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "next_batch",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "next_batch"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c5ba06ae44fbc2ea0c7b396197baf96dc78c23be02d07416ce10f3c8208cafaa"
+}

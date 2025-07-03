@@ -10,13 +10,19 @@ mod error;
 mod server;
 mod session;
 
-use crate::config::Config;
+use crate::{
+    config::Config,
+    session::{ClientSession, FullSession},
+};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
-use sqlx::postgres::PgPoolOptions;
+use matrix_sdk::{SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use tracing::info;
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+type DatabasePool = PgPool;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> eyre::Result<()> {
@@ -34,7 +40,7 @@ async fn main() -> eyre::Result<()> {
 
     info!("Starting up");
 
-    let db = PgPoolOptions::new()
+    let db: DatabasePool = PgPoolOptions::new()
         .max_connections(20)
         .connect(&config.database_url)
         .await
@@ -50,20 +56,74 @@ async fn main() -> eyre::Result<()> {
             .expect("no data_dir directory found")
             .join("libretto")
     });
-    let session_file = data_dir.join("session");
 
-    let (client, sync_token) = if std::path::Path::new(&session_file).exists() {
-        crate::session::restore_session(&session_file).await?
+    let maybe_session = sqlx::query!(
+        r#"select user_id,
+        device_id,
+        access_token,
+        refresh_token,
+        homeserver_url,
+        db_path,
+        db_passphrase,
+        next_batch
+        from "account""#
+    )
+    .fetch_optional(&db)
+    .await?;
+    let (client, sync_token) = if let Some(session_res) = maybe_session {
+        let session = FullSession {
+            sync_token: session_res.next_batch,
+            client_session: ClientSession {
+                homeserver: session_res.homeserver_url,
+                db_path: session_res.db_path,
+                passphrase: session_res.db_passphrase,
+            },
+            user_session: MatrixSession {
+                meta: SessionMeta {
+                    user_id: session_res.user_id.try_into()?,
+                    device_id: session_res.device_id.into(),
+                },
+                tokens: SessionTokens {
+                    access_token: session_res.access_token,
+                    refresh_token: None,
+                },
+            },
+        };
+        crate::session::restore_session(session, &data_dir).await?
     } else {
-        (
-            crate::auth::login(&data_dir, &session_file, &config.account_config).await?,
-            None,
+        let (client, session) = crate::auth::login(&data_dir, &config.account_config).await?;
+
+        let _ = sqlx::query!(
+            // language=PostgreSQL
+            r#"
+            insert into "account"(
+                user_id,
+                device_id,
+                access_token,
+                refresh_token,
+                db_passphrase,
+                homeserver_url,
+                db_path,
+                next_batch)
+                values ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            session.user_session.meta.user_id.to_string(),
+            session.user_session.meta.device_id.to_string(),
+            session.user_session.tokens.access_token,
+            session.user_session.tokens.refresh_token,
+            session.client_session.passphrase,
+            session.client_session.homeserver,
+            session.client_session.db_path,
+            session.sync_token
         )
+        .execute(&db)
+        .await?;
+        (client, session.sync_token)
     };
 
     client.event_cache().subscribe()?;
 
-    crate::client::run(&client, sync_token, &session_file, &config).await?;
+    crate::client::run(&client, sync_token, db.clone(), &config).await?;
 
     let app = crate::server::build_router(client.clone());
 
@@ -82,7 +142,6 @@ async fn main() -> eyre::Result<()> {
 
     let sync_task = tokio::spawn({
         let client = client.clone();
-        let session_file = session_file.clone();
         async move {
             let sync_loop = client.sync_with_result_callback(
                 matrix_sdk::config::SyncSettings::default(),
@@ -90,9 +149,13 @@ async fn main() -> eyre::Result<()> {
                     let response = sync_result?;
 
                     // We persist the token each time to be able to restore our session
-                    crate::session::persist_sync_token(&session_file, response.next_batch.clone())
-                        .await
-                        .map_err(|err| matrix_sdk::Error::UnknownError(err.into()))?;
+                    crate::session::persist_sync_token(
+                        db.clone(),
+                        client.user_id().expect("to be logged in"),
+                        response.next_batch.clone(),
+                    )
+                    .await
+                    .map_err(|err| matrix_sdk::Error::UnknownError(err.into()))?;
 
                     Ok(matrix_sdk::LoopCtrl::Continue)
                 },

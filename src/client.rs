@@ -1,10 +1,9 @@
-use std::path::Path;
-
 use color_eyre::eyre;
 use matrix_sdk::ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use matrix_sdk::{Client, config::SyncSettings};
 use tracing::{info, trace, warn};
 
+use crate::DatabasePool;
 use crate::config::Config;
 use crate::session::persist_sync_token;
 
@@ -12,7 +11,7 @@ use crate::session::persist_sync_token;
 pub async fn run(
     client: &Client,
     initial_sync_token: Option<String>,
-    session_file: &Path,
+    database: DatabasePool,
     config: &Config,
 ) -> eyre::Result<()> {
     info!("Launching a first sync...");
@@ -30,7 +29,12 @@ pub async fn run(
     loop {
         match client.sync_once(sync_settings.clone()).await {
             Ok(response) => {
-                persist_sync_token(session_file, response.next_batch).await?;
+                persist_sync_token(
+                    database,
+                    client.user_id().expect("to be logged in"),
+                    response.next_batch,
+                )
+                .await?;
                 break;
             }
             Err(error) => {

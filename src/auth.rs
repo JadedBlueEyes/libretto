@@ -1,6 +1,5 @@
 use color_eyre::eyre::{self};
 use matrix_sdk::Client;
-#[cfg(false)]
 use matrix_sdk::encryption::Encryption;
 use rand::Rng;
 use rand::distr::Alphanumeric;
@@ -12,9 +11,8 @@ use crate::session::{ClientSession, FullSession};
 
 pub async fn login(
     data_dir: &std::path::Path,
-    session_file: &std::path::Path,
     config: &AccountConfig,
-) -> eyre::Result<Client> {
+) -> eyre::Result<(Client, FullSession)> {
     info!("No previous session found, logging in…");
     let mut rng = rand::rng();
 
@@ -25,16 +23,15 @@ pub async fn login(
         .map(char::from)
         .collect();
 
-    let db_subfolder: String = (&mut rng)
+    let db_path: String = (&mut rng)
         .sample_iter(Alphanumeric)
         .take(7)
         .map(char::from)
         .collect();
-    let db_path = data_dir.join(db_subfolder);
 
     let client = Client::builder()
         .homeserver_url(&config.server)
-        // .sqlite_store(&db_path, Some(&passphrase))
+        .sqlite_store(data_dir.join(&db_path), Some(&passphrase))
         .build()
         .await?;
 
@@ -75,26 +72,21 @@ pub async fn login(
         }
     }
 
-    #[cfg(false)]
     verify_device(client.encryption(), config.recovery_key.clone()).await?;
 
     // Persist the session to reuse it later.
     let user_session = matrix_auth
         .session()
         .expect("A logged-in client should have a session");
-    let serialized_session = serde_json::to_string(&FullSession {
+    let session = FullSession {
         client_session,
         user_session,
         sync_token: None,
-    })?;
-    tokio::fs::write(session_file, serialized_session).await?;
+    };
 
-    info!("Session persisted in {}", session_file.to_string_lossy());
-
-    Ok(client)
+    Ok((client, session))
 }
 
-#[cfg(false)]
 pub async fn verify_device(
     encryption: Encryption,
     recovery_key: Option<String>,
