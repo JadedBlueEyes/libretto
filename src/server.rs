@@ -59,7 +59,6 @@ pub async fn room(
             .expect("Room ID was not a valid ID or alias!")
     };
 
-    #[cfg(false)]
     client
         .encryption()
         .backups()
