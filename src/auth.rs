@@ -30,20 +30,32 @@ pub async fn login(
         .collect();
 
     let client = Client::builder()
-        .homeserver_url(&config.server)
+        .homeserver_url(
+            config
+                .server
+                .as_ref()
+                .expect("to have homeserver when logging in"),
+        )
         .sqlite_store(data_dir.join(&db_path), Some(&passphrase))
         .build()
         .await?;
 
     let client_session = ClientSession {
-        homeserver: config.server.clone(),
+        homeserver: config
+            .server
+            .as_ref()
+            .expect("to have homeserver when logging in")
+            .clone(),
         db_path,
         passphrase,
     };
     let matrix_auth = client.matrix_auth();
 
     loop {
-        let username = &config.username;
+        let username = config
+            .username
+            .as_ref()
+            .expect("to have username when logging in");
         let password = config.password.clone().unwrap_or_else(|| {
             println!("Type password for the bot (characters won't show up as you type them)");
             match prompt_password("Password: ") {

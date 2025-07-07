@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 pub struct Config {
     #[clap(flatten)]
-    pub account_config: AccountConfig,
+    pub account_config: Option<AccountConfig>,
 
     #[arg(long, env = "DATABASE_URL")]
     pub database_url: String,
@@ -19,11 +19,11 @@ pub struct Config {
 pub struct AccountConfig {
     /// URL of the homeserver to connect to
     #[arg(short, long, env = "MATRIX_SERVER")]
-    pub server: String,
+    pub server: Option<String>,
 
     /// Username of the bot
     #[arg(short, long, env = "MATRIX_USERNAME")]
-    pub username: String,
+    pub username: Option<String>,
 
     /// Password of the bot
     #[arg(short, long, env = "MATRIX_PASSWORD")]

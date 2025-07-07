@@ -45,7 +45,9 @@ pub async fn run(
     info!("Initial sync done");
 
     let current_session = client.device_id().map(|d| d.to_owned());
-    if config.account_config.delete_other_devices {
+    if let Some(account_config) = &config.account_config
+        && account_config.delete_other_devices
+    {
         info!(
             current_session = format!("{current_session:?}"),
             "Checking for other devices to delete"
@@ -68,8 +70,8 @@ pub async fn run(
                 .delete_devices(
                     &other_devices,
                     Some(AuthData::Password(Password::new(
-                        UserIdentifier::UserIdOrLocalpart(config.account_config.username.clone()),
-                        config.account_config.password.clone().unwrap_or_else(|| {
+                        UserIdentifier::UserIdOrLocalpart(account_config.username.as_ref().expect("UIAA requires username/password").clone()),
+                        account_config.password.clone().unwrap_or_else(|| {
                             println!(
                                 "Type password for the account (characters won't show up as you type them)"
                             );
@@ -81,14 +83,16 @@ pub async fn run(
         }
     }
 
-    if config.account_config.set_device_name {
+    if let Some(account_config) = &config.account_config
+        && account_config.set_device_name
+    {
         if let Some(current_session) = current_session {
             info!(
                 current_session = format!("{current_session:?}"),
-                "Renaming device to {}", &config.account_config.device_name
+                "Renaming device to {}", &account_config.device_name
             );
             client
-                .rename_device(&current_session, &config.account_config.device_name)
+                .rename_device(&current_session, &account_config.device_name)
                 .await?;
         } else {
             warn!("No device ID found, cannot name device");

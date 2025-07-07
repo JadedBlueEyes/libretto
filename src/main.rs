@@ -51,11 +51,15 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("failed to run migrations")?;
 
-    let data_dir = config.account_config.data_dir.clone().unwrap_or_else(|| {
-        dirs::data_dir()
-            .expect("no data_dir directory found")
-            .join("libretto")
-    });
+    let data_dir = config
+        .account_config
+        .as_ref()
+        .and_then(|ac| ac.data_dir.clone())
+        .unwrap_or_else(|| {
+            dirs::data_dir()
+                .expect("no data_dir directory found")
+                .join("libretto")
+        });
 
     let maybe_session = sqlx::query!(
         r#"select user_id,
@@ -91,7 +95,11 @@ async fn main() -> eyre::Result<()> {
         };
         crate::session::restore_session(session, &data_dir).await?
     } else {
-        let (client, session) = crate::auth::login(&data_dir, &config.account_config).await?;
+        let account_config = config
+            .account_config
+            .as_ref()
+            .expect("AccountConfig required for login");
+        let (client, session) = crate::auth::login(&data_dir, account_config).await?;
 
         let _ = sqlx::query!(
             // language=PostgreSQL
