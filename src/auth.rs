@@ -13,7 +13,7 @@ pub async fn login(
     data_dir: &std::path::Path,
     config: &AccountConfig,
 ) -> eyre::Result<(Client, FullSession)> {
-    info!("No previous session found, logging in…");
+    info!("Logging in to new session…");
     let mut rng = rand::rng();
 
     // Generate a random passphrase.

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use color_eyre::eyre;
-use matrix_sdk::{Client, authentication::matrix::MatrixSession};
+use matrix_sdk::{Client, SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
 use ruma::UserId;
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +39,77 @@ pub struct FullSession {
     pub sync_token: Option<String>,
 }
 
-/// Restore a previous session from a file.
+/// Insert a new account session into the database.
+pub async fn insert_account_session(db: &DatabasePool, session: &FullSession) -> eyre::Result<()> {
+    sqlx::query!(
+        // language=PostgreSQL
+        r#"
+        insert into "account"(
+            user_id,
+            device_id,
+            access_token,
+            refresh_token,
+            db_passphrase,
+            homeserver_url,
+            db_path,
+            next_batch)
+            values ($1, $2, $3, $4, $5, $6, $7, $8)
+        "#,
+        session.user_session.meta.user_id.to_string(),
+        session.user_session.meta.device_id.to_string(),
+        session.user_session.tokens.access_token,
+        session.user_session.tokens.refresh_token,
+        session.client_session.passphrase,
+        session.client_session.homeserver,
+        session.client_session.db_path,
+        session.sync_token
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Load a session from the database, if it exists.
+pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<FullSession>> {
+    let maybe_session = sqlx::query!(
+        r#"select user_id,
+        device_id,
+        access_token,
+        refresh_token,
+        homeserver_url,
+        db_path,
+        db_passphrase,
+        next_batch
+        from "account""#
+    )
+    .fetch_optional(db)
+    .await?;
+
+    if let Some(session_res) = maybe_session {
+        Ok(Some(FullSession {
+            sync_token: session_res.next_batch,
+            client_session: ClientSession {
+                homeserver: session_res.homeserver_url,
+                db_path: session_res.db_path,
+                passphrase: session_res.db_passphrase,
+            },
+            user_session: MatrixSession {
+                meta: SessionMeta {
+                    user_id: session_res.user_id.try_into()?,
+                    device_id: session_res.device_id.into(),
+                },
+                tokens: SessionTokens {
+                    access_token: session_res.access_token,
+                    refresh_token: None,
+                },
+            },
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Restore a previous session from the session data.
 pub async fn restore_session(
     session: FullSession,
     data_dir: &Path,

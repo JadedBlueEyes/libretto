@@ -10,13 +10,10 @@ mod error;
 mod server;
 mod session;
 
-use crate::{
-    config::Config,
-    session::{ClientSession, FullSession},
-};
+use crate::{config::Config, session::load_session_from_db};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
-use matrix_sdk::{SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
+use matrix_sdk::sync::SyncResponse;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tracing::info;
 use tracing_log::AsTrace;
@@ -61,38 +58,8 @@ async fn main() -> eyre::Result<()> {
                 .join("libretto")
         });
 
-    let maybe_session = sqlx::query!(
-        r#"select user_id,
-        device_id,
-        access_token,
-        refresh_token,
-        homeserver_url,
-        db_path,
-        db_passphrase,
-        next_batch
-        from "account""#
-    )
-    .fetch_optional(&db)
-    .await?;
-    let (client, sync_token) = if let Some(session_res) = maybe_session {
-        let session = FullSession {
-            sync_token: session_res.next_batch,
-            client_session: ClientSession {
-                homeserver: session_res.homeserver_url,
-                db_path: session_res.db_path,
-                passphrase: session_res.db_passphrase,
-            },
-            user_session: MatrixSession {
-                meta: SessionMeta {
-                    user_id: session_res.user_id.try_into()?,
-                    device_id: session_res.device_id.into(),
-                },
-                tokens: SessionTokens {
-                    access_token: session_res.access_token,
-                    refresh_token: None,
-                },
-            },
-        };
+    let maybe_session = load_session_from_db(&db).await?;
+    let (client, sync_token) = if let Some(session) = maybe_session {
         crate::session::restore_session(session, &data_dir).await?
     } else {
         let account_config = config
@@ -101,31 +68,7 @@ async fn main() -> eyre::Result<()> {
             .expect("AccountConfig required for login");
         let (client, session) = crate::auth::login(&data_dir, account_config).await?;
 
-        let _ = sqlx::query!(
-            // language=PostgreSQL
-            r#"
-            insert into "account"(
-                user_id,
-                device_id,
-                access_token,
-                refresh_token,
-                db_passphrase,
-                homeserver_url,
-                db_path,
-                next_batch)
-                values ($1, $2, $3, $4, $5, $6, $7, $8)
-            "#,
-            session.user_session.meta.user_id.to_string(),
-            session.user_session.meta.device_id.to_string(),
-            session.user_session.tokens.access_token,
-            session.user_session.tokens.refresh_token,
-            session.client_session.passphrase,
-            session.client_session.homeserver,
-            session.client_session.db_path,
-            session.sync_token
-        )
-        .execute(&db)
-        .await?;
+        crate::session::insert_account_session(&db, &session).await?;
         (client, session.sync_token)
     };
 
@@ -154,7 +97,8 @@ async fn main() -> eyre::Result<()> {
             let sync_loop = client.sync_with_result_callback(
                 matrix_sdk::config::SyncSettings::default(),
                 |sync_result| async {
-                    let response = sync_result?;
+                    // Explicitly specify type so we can disable RA's false positive E0308
+                    let response: SyncResponse = sync_result?;
 
                     // We persist the token each time to be able to restore our session
                     crate::session::persist_sync_token(
