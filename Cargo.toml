@@ -16,12 +16,14 @@ futures-util = "0.3.31"
 icu = "2.0.0"
 jiff = "0.2.15"
 listenfd = "1.0.2"
-matrix-sdk = { git = "https://github.com/JadedBlueEyes/matrix-rust-sdk.git", rev="d54a3ed4001202d58044db84c78a653b542db01d", features = ["eyre", "native-tls"], default-features = true}
+matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk.git", rev="40e3cd3c224b359c312c1f3c55b0d4f7b2be4346", features = ["eyre", "native-tls"], default-features = true}
 rand = "0.9.1"
 regex = "1.11.1"
 reqwest = "0.12.19"
 rpassword = "7.4.0"
-ruma = { git = "https://github.com/ruma/ruma", rev = "d1d53e2b7aaf9190f11a5465b9edf6a19fc5b59a", features = ["html-matrix", "html"] } # match rust-sdk
+
+ruma = {version = "0.12.4", features = ["html-matrix", "html"] } # match rust-sdk
+
 rust-embed = { version = "8.7.2", features = ["axum", "mime-guess", "include-exclude"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
