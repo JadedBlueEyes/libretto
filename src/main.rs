@@ -15,6 +15,7 @@ use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use matrix_sdk::sync::SyncResponse;
 use sqlx::{PgPool, postgres::PgPoolOptions};
+use tokio_stream::StreamExt;
 use tracing::info;
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -93,6 +94,7 @@ async fn main() -> eyre::Result<()> {
 
     let sync_task = tokio::spawn({
         let client = client.clone();
+
         async move {
             let sync_loop = client.sync_with_result_callback(
                 matrix_sdk::config::SyncSettings::default(),
@@ -112,8 +114,57 @@ async fn main() -> eyre::Result<()> {
                     Ok(matrix_sdk::LoopCtrl::Continue)
                 },
             );
+            let client = client.clone();
+
+            let room_updates = tokio::spawn(async move {
+                let (mut rooms, mut rooms_stream) = client.rooms_stream();
+                info!("initial rooms: {rooms:?}");
+                // Compare from database to find deleted and upsert the rest
+
+                while let Some(room_changes) = rooms_stream.next().await {
+                    info!("Rooms have been updated: {rooms:?}");
+                    for diff in room_changes {
+                        // match diff {
+                        //     VectorDiff::Append { ref values } => {
+                        //         // Add values
+                        //     }
+                        //     VectorDiff::Clear => {
+                        //         // Delete all
+                        //     }
+                        //     VectorDiff::PushFront { ref value }
+                        //     | VectorDiff::PushBack { ref value } => {
+                        //         // Add value
+                        //     }
+                        //     VectorDiff::PopFront => {
+                        //         // Remove 0
+                        //     }
+                        //     VectorDiff::PopBack => {
+                        //         // Remove last
+                        //     }
+                        //     VectorDiff::Insert { index, ref value } => {
+                        //         // Add last
+                        //     }
+                        //     VectorDiff::Set { index, ref value } => {
+                        //         // Compare index - if the same room ID, update, else remove and insert
+                        //     }
+                        //     VectorDiff::Remove { index } => {
+                        //         // Remove index
+                        //     }
+                        //     VectorDiff::Truncate { length } => {
+                        //         // Remove from point to end
+                        //     }
+                        //     VectorDiff::Reset { ref values } => {
+                        //         // Compare from database to find deleted and upsert the rest
+                        //     }
+                        // }
+
+                        diff.apply(&mut rooms);
+                    }
+                }
+            });
 
             tokio::select! {
+                _ = room_updates => info!("Room updates finished"),
                 _ = sync_loop => info!("Sync loop finished"),
                 _ = signal => info!("Sync shutdown in progress"),
             }

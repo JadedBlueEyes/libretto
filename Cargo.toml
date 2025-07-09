@@ -11,6 +11,7 @@ clap = { version = "4.5.36", features = ["derive", "env"] }
 clap-verbosity-flag = "3.0.2"
 color-eyre = "0.6.5"
 dirs = "6.0.0"
+eyeball-im = "0.7.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
 icu = "2.0.0"
@@ -29,6 +30,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sqlx = { git = "https://github.com/JadedBlueEyes/sqlx.git", branch="jade/update-sqlite", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate"] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
 tokio = { version = "1.45.1", features = ["rt", "signal"] }
+tokio-stream = "0.1.17"
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
