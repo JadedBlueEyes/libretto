@@ -1,8 +1,13 @@
+use color_eyre::eyre::{self, Context};
 // filepath: /Users/jade/Code/libretto/src/room_list.rs
 use matrix_sdk::ruma::{OwnedRoomId, RoomId};
-use matrix_sdk::{Room, RoomDisplayName, RoomState};
+use matrix_sdk::{Room, RoomCreateWithCreatorEventContent, RoomDisplayName, RoomState};
+use ruma::events::room::tombstone::RoomTombstoneEventContent;
+use ruma::{OwnedRoomAliasId, OwnedUserId, UserId};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
+use crate::DatabasePool;
 use crate::error::AppError;
 
 /// Represents a room in the room list with additional metadata
@@ -82,6 +87,51 @@ impl RoomList {
     }
 }
 
+/// Represents a row in the `room` table in the database.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RoomDbEntry {
+    #[sqlx(try_from = "String")]
+    pub room_id: OwnedRoomId,
+    #[sqlx(try_from = "String")]
+    pub user_id: OwnedUserId,
+
+    pub room_type: Option<String>,
+    #[sqlx(json(nullable))]
+    pub creation_content: Option<RoomCreateWithCreatorEventContent>,
+    #[sqlx(json(nullable))]
+    pub tombstone_content: Option<RoomTombstoneEventContent>,
+
+    #[sqlx(json(nullable))]
+    pub name: Option<RoomDisplayName>,
+    pub avatar: Option<String>,
+
+    pub topic: Option<String>,
+    #[sqlx(try_from = "OptionAliasDbParser")]
+    pub canonical_alias: Option<OwnedRoomAliasId>,
+
+    pub encryption_state: Option<bool>,
+
+    // #[sqlx(try_from = "Option<i32>")]
+    pub last_event_timestamp: Option<i64>,
+
+    pub unread_highlight_count: i32,
+    pub unread_notification_count: i32,
+
+    pub prev_batch: Option<String>,
+}
+
+#[derive(sqlx::Type)]
+#[sqlx(transparent, no_pg_array)]
+struct OptionAliasDbParser(Option<String>);
+
+impl TryFrom<OptionAliasDbParser> for Option<OwnedRoomAliasId> {
+    type Error = ruma::IdParseError;
+
+    fn try_from(value: OptionAliasDbParser) -> Result<Self, Self::Error> {
+        value.0.map(OwnedRoomAliasId::try_from).transpose()
+    }
+}
+
 /// Helper function to create a RoomListEntry from a matrix-sdk Room
 pub async fn room_to_list_entry(room: &Room) -> Result<RoomListEntry, AppError> {
     let room_id = room.room_id().to_owned();
@@ -96,4 +146,45 @@ pub async fn room_to_list_entry(room: &Room) -> Result<RoomListEntry, AppError> 
         unread_count: room.unread_notification_counts().notification_count,
         state: room.state(),
     })
+}
+
+async fn get_room_db(
+    user_id: &UserId,
+    room_id: &OwnedRoomId,
+    db: &DatabasePool,
+) -> eyre::Result<RoomDbEntry> {
+    sqlx::query(
+        // language=PostgreSQL
+        r#"select *
+        from "room"
+        where user_id = $1 and room_id = $2"#,
+    )
+    .bind(user_id.as_str())
+    .bind(room_id.as_str())
+    .map(|row| RoomDbEntry::from_row(&row).wrap_err("Failed to deserialize Room"))
+    .fetch_one(db)
+    .await
+    .wrap_err("Failed to fetch Room")?
+}
+
+fn upsert_room_db(_user_id: &UserId, _db: &DatabasePool) {
+    todo!()
+}
+
+pub async fn room_ids_from_db(
+    user_id: &UserId,
+    db: &DatabasePool,
+) -> eyre::Result<Vec<OwnedRoomId>> {
+    sqlx::query_scalar!(
+        // language=PostgreSQL
+        r#"select room_id
+        from "room"
+        where user_id = $1"#,
+        user_id.as_str()
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|r| r.try_into().wrap_err("Failed to convert room ID"))
+    .collect()
 }

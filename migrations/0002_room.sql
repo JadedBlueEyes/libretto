@@ -19,8 +19,8 @@ CREATE TABLE room (
 	topic                TEXT,
 	canonical_alias      TEXT,
 
-	-- either unknown, enabled or disabled
-	encryption_state     TEXT,
+	-- either unknown (null), enabled or disabled
+	encryption_state     BOOL,
 
 	last_event_timestamp INTEGER,
 

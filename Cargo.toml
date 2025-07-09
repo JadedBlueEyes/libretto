@@ -28,7 +28,9 @@ ruma = {version = "0.12.4", features = ["html-matrix", "html"] } # match rust-sd
 rust-embed = { version = "8.7.2", features = ["axum", "mime-guess", "include-exclude"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-sqlx = { git = "https://github.com/JadedBlueEyes/sqlx.git", branch="jade/update-sqlite", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate"] } # why no default/any feature? sqlx pins an outdated sqlite-sys, causing dependency resolve errors if any /sqlite/migrate/json is enabled
+sqlx = { git = "https://github.com/JadedBlueEyes/sqlx.git", branch="jade/update-sqlite", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "macros", "migrate", "json"] }
+strum = { version = "0.27.1" }
+strum_macros = "0.27.1"
 tokio = { version = "1.45.1", features = ["rt", "signal"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.41"

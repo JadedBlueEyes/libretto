@@ -72,6 +72,7 @@ pub async fn insert_account_session(db: &DatabasePool, session: &FullSession) ->
 /// Load a session from the database, if it exists.
 pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<FullSession>> {
     let maybe_session = sqlx::query!(
+        // language=PostgreSQL
         r#"select user_id,
         device_id,
         access_token,
