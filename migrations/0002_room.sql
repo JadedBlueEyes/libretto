@@ -1,3 +1,14 @@
+BEGIN;
+
+CREATE TYPE room_membership_state AS ENUM (
+    'joined',
+    'left',
+    'invited',
+    'knocked',
+    'banned',
+    'forgotten'
+);
+
 CREATE TABLE room (
 	room_id              TEXT    NOT NULL,
 	user_id              TEXT    NOT NULL,
@@ -10,9 +21,8 @@ CREATE TABLE room (
 	-- The m.room.tombstone state event’s content of this room if one has been received.
 	tombstone_content    JSONB,
 
-
 	-- The room membership state
-	room_state           TEXT   NOT NULL,
+	room_state           room_membership_state  NOT NULL,
 
 	-- Display name of the room, JSON from the SDK
 	name                 JSONB,
@@ -34,3 +44,5 @@ CREATE TABLE room (
 	-- Pagination token for backfill
 	prev_batch           TEXT
 );
+
+COMMIT;

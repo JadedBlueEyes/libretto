@@ -1,7 +1,7 @@
 use color_eyre::eyre::{self, Context};
 // filepath: /Users/jade/Code/libretto/src/room_list.rs
 use matrix_sdk::ruma::{OwnedRoomId, RoomId};
-use matrix_sdk::{Room, RoomCreateWithCreatorEventContent, RoomDisplayName, RoomState};
+use matrix_sdk::{Room, RoomCreateWithCreatorEventContent, RoomDisplayName};
 use ruma::events::room::tombstone::RoomTombstoneEventContent;
 use ruma::{OwnedRoomAliasId, OwnedUserId, UserId};
 use serde::{Deserialize, Serialize};
@@ -101,7 +101,6 @@ pub struct RoomDbEntry {
     #[sqlx(json(nullable))]
     pub tombstone_content: Option<RoomTombstoneEventContent>,
 
-    #[sqlx(try_from = "RoomStateDbParser")]
     pub room_state: RoomState,
 
     #[sqlx(json(nullable))]
@@ -123,32 +122,29 @@ pub struct RoomDbEntry {
     pub prev_batch: Option<String>,
 }
 
-#[derive(sqlx::Type)]
-#[sqlx(transparent)]
-struct RoomStateDbParser(String);
-
-impl TryFrom<RoomStateDbParser> for RoomState {
-    type Error = String;
-
-    fn try_from(value: RoomStateDbParser) -> Result<Self, Self::Error> {
-        match value.0.as_str() {
-            "joined" => Ok(RoomState::Joined),
-            "left" => Ok(RoomState::Left),
-            "invited" => Ok(RoomState::Invited),
-            "knocked" => Ok(RoomState::Knocked),
-            "banned" => Ok(RoomState::Banned),
-            _ => Err(format!("Invalid room state: {}", value.0)),
-        }
-    }
+/// Enum keeping track of the membership of our user in a room.
+/// Differs from the matrix_sdk enum in that it includes the 'forgotten' state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "room_membership_state", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum RoomState {
+    Joined,
+    Left,
+    Invited,
+    Knocked,
+    Banned,
+    Forgotten,
 }
 
-fn room_state_to_str(state: RoomState) -> &'static str {
-    match state {
-        RoomState::Joined => "joined",
-        RoomState::Left => "left",
-        RoomState::Invited => "invited",
-        RoomState::Knocked => "knocked",
-        RoomState::Banned => "banned",
+impl From<matrix_sdk::RoomState> for RoomState {
+    fn from(state: matrix_sdk::RoomState) -> Self {
+        match state {
+            matrix_sdk::RoomState::Joined => RoomState::Joined,
+            matrix_sdk::RoomState::Left => RoomState::Left,
+            matrix_sdk::RoomState::Invited => RoomState::Invited,
+            matrix_sdk::RoomState::Knocked => RoomState::Knocked,
+            matrix_sdk::RoomState::Banned => RoomState::Banned,
+        }
     }
 }
 
@@ -176,7 +172,7 @@ pub async fn room_to_list_entry(room: &Room) -> Result<RoomListEntry, AppError> 
         is_encrypted: room.encryption_state().is_encrypted(),
         is_direct,
         unread_count: room.unread_notification_counts().notification_count,
-        state: room.state(),
+        state: room.state().into(),
     })
 }
 
