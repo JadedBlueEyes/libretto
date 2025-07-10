@@ -7,6 +7,8 @@ use ruma::{OwnedRoomAliasId, OwnedUserId, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use sqlx::types::Json as SqlxJson;
+
 use crate::DatabasePool;
 use crate::error::AppError;
 
@@ -195,8 +197,92 @@ async fn get_room_db(
     .wrap_err("Failed to fetch Room")?
 }
 
-fn upsert_room_db(_user_id: &UserId, _db: &DatabasePool) {
-    todo!()
+pub async fn update_rooms(
+    rooms: &[matrix_sdk::Room],
+    user_id: &UserId,
+    db: &DatabasePool,
+) -> eyre::Result<()> {
+    let mut tx = db.begin().await?;
+    let forgotten_rooms = room_ids_from_db(user_id, db)
+        .await?
+        .into_iter()
+        .filter(|room_id| rooms.iter().any(|room| room.room_id() == room_id))
+        .map(|room_id| room_id.into())
+        .collect::<Vec<String>>();
+
+    sqlx::query!(
+        // language=PostgreSQL
+        r#"update "room"
+        set room_state = 'forgotten'
+        where user_id = $1 and room_id = any($2)"#,
+        user_id.as_str(),
+        &forgotten_rooms
+    )
+    .execute(&mut *tx)
+    .await
+    .wrap_err("Failed to mark forgotten rooms")?;
+
+    for room in rooms {
+        let encryption = match room.encryption_state() {
+            matrix_sdk::EncryptionState::Encrypted => Some(true),
+            matrix_sdk::EncryptionState::NotEncrypted => Some(false),
+            matrix_sdk::EncryptionState::Unknown => None,
+        };
+        let counts = room.unread_notification_counts();
+
+        // Upsert rooms we still have knowledge of
+        sqlx::query!(
+            // language=PostgreSQL
+            r#"insert into "room" (
+                user_id,
+                room_id,
+                room_state,
+                room_type,
+                creation_content,
+                tombstone_content,
+                encryption_state,
+                unread_highlight_count,
+                unread_notification_count,
+                name,
+                avatar,
+                topic,
+                canonical_alias
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            on conflict (user_id, room_id) do update set
+            room_type                 = COALESCE(EXCLUDED.room_type, room.room_type),
+            creation_content          = COALESCE(EXCLUDED.creation_content, room.creation_content),
+            tombstone_content         = COALESCE(EXCLUDED.tombstone_content, room.tombstone_content),
+            room_state                = COALESCE(EXCLUDED.room_state, room.room_state),
+            name                      = COALESCE(EXCLUDED.name, room.name),
+            avatar                    = COALESCE(EXCLUDED.avatar, room.avatar),
+            topic                     = COALESCE(EXCLUDED.topic, room.topic),
+            canonical_alias           = COALESCE(EXCLUDED.canonical_alias, room.canonical_alias),
+            encryption_state          = COALESCE(EXCLUDED.encryption_state, room.encryption_state),
+            unread_highlight_count    = COALESCE(EXCLUDED.unread_highlight_count, room.unread_highlight_count),
+            unread_notification_count = COALESCE(EXCLUDED.unread_notification_count, room.unread_notification_count)
+            "#,
+            user_id.as_str(),
+            room.room_id().as_str(),
+            RoomState::from(room.state()) as RoomState,
+            room.room_type().map(|i| i.to_string()),
+            room.create_content().map(|i| SqlxJson(i)) as _,
+            room.tombstone_content().map(|i| SqlxJson(i)) as _,
+            encryption,
+            counts.highlight_count as i32,
+            counts.notification_count as i32,
+            SqlxJson(room.display_name().await?) as _,
+            room.avatar_url().map(|i| i.to_string()),
+            room.topic(),
+            room.canonical_alias().map(|i| i.to_string())
+        )
+        .execute(&mut *tx)
+        .await
+        .wrap_err("Failed to upsert room")?;
+    }
+
+    tx.commit().await?;
+    Ok(())
 }
 
 pub async fn room_ids_from_db(

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update \"room\"\n        set room_state = 'forgotten'\n        where user_id = $1 and room_id = any($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ace68235e4c87e2e19c4cc84e18ad342bf6db54c1d1293790db74b68596484b4"
+}

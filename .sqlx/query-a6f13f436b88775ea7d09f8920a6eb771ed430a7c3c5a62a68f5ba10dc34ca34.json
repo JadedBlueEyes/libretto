@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into \"room\" (\n                user_id,\n                room_id,\n                room_state,\n                room_type,\n                creation_content,\n                tombstone_content,\n                encryption_state,\n                unread_highlight_count,\n                unread_notification_count,\n                name,\n                avatar,\n                topic,\n                canonical_alias\n            )\n            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n            on conflict (user_id, room_id) do update set\n            room_type                 = COALESCE(EXCLUDED.room_type, room.room_type),\n            creation_content          = COALESCE(EXCLUDED.creation_content, room.creation_content),\n            tombstone_content         = COALESCE(EXCLUDED.tombstone_content, room.tombstone_content),\n            room_state                = COALESCE(EXCLUDED.room_state, room.room_state),\n            name                      = COALESCE(EXCLUDED.name, room.name),\n            avatar                    = COALESCE(EXCLUDED.avatar, room.avatar),\n            topic                     = COALESCE(EXCLUDED.topic, room.topic),\n            canonical_alias           = COALESCE(EXCLUDED.canonical_alias, room.canonical_alias),\n            encryption_state          = COALESCE(EXCLUDED.encryption_state, room.encryption_state),\n            unread_highlight_count    = COALESCE(EXCLUDED.unread_highlight_count, room.unread_highlight_count),\n            unread_notification_count = COALESCE(EXCLUDED.unread_notification_count, room.unread_notification_count)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "room_membership_state",
+            "kind": {
+              "Enum": [
+                "joined",
+                "left",
+                "invited",
+                "knocked",
+                "banned",
+                "forgotten"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Bool",
+        "Int4",
+        "Int4",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a6f13f436b88775ea7d09f8920a6eb771ed430a7c3c5a62a68f5ba10dc34ca34"
+}

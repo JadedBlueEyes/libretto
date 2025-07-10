@@ -115,14 +115,26 @@ async fn main() -> eyre::Result<()> {
                 },
             );
             let client = client.clone();
+            let db = db.clone();
 
             let room_updates = tokio::spawn(async move {
                 let (mut rooms, mut rooms_stream) = client.rooms_stream();
-                info!("initial rooms: {rooms:?}");
+
+                room_list::update_rooms(
+                    rooms
+                        .iter()
+                        .map(|r| r.to_owned())
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    client.user_id().expect("to be logged in"),
+                    &db,
+                )
+                .await
+                .unwrap();
                 // Compare from database to find deleted and upsert the rest
 
                 while let Some(room_changes) = rooms_stream.next().await {
-                    info!("Rooms have been updated: {rooms:?}");
+                    info!("Rooms have been updated");
                     for diff in room_changes {
                         // match diff {
                         //     VectorDiff::Append { ref values } => {
@@ -157,8 +169,20 @@ async fn main() -> eyre::Result<()> {
                         //         // Compare from database to find deleted and upsert the rest
                         //     }
                         // }
+                        // In the meantime, just do a full update every time:
 
                         diff.apply(&mut rooms);
+                        room_list::update_rooms(
+                            rooms
+                                .iter()
+                                .map(|r| r.to_owned())
+                                .collect::<Vec<_>>()
+                                .as_slice(),
+                            client.user_id().expect("to be logged in"),
+                            &db,
+                        )
+                        .await
+                        .unwrap();
                     }
                 }
             });
