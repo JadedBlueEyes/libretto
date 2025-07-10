@@ -10,6 +10,10 @@ CREATE TABLE room (
 	-- The m.room.tombstone state event’s content of this room if one has been received.
 	tombstone_content    JSONB,
 
+
+	-- The room membership state
+	room_state           TEXT   NOT NULL,
+
 	-- Display name of the room, JSON from the SDK
 	name                 JSONB,
 	-- MXC URI for avatar

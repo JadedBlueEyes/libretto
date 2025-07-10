@@ -101,6 +101,9 @@ pub struct RoomDbEntry {
     #[sqlx(json(nullable))]
     pub tombstone_content: Option<RoomTombstoneEventContent>,
 
+    #[sqlx(try_from = "RoomStateDbParser")]
+    pub room_state: RoomState,
+
     #[sqlx(json(nullable))]
     pub name: Option<RoomDisplayName>,
     pub avatar: Option<String>,
@@ -121,7 +124,36 @@ pub struct RoomDbEntry {
 }
 
 #[derive(sqlx::Type)]
-#[sqlx(transparent, no_pg_array)]
+#[sqlx(transparent)]
+struct RoomStateDbParser(String);
+
+impl TryFrom<RoomStateDbParser> for RoomState {
+    type Error = String;
+
+    fn try_from(value: RoomStateDbParser) -> Result<Self, Self::Error> {
+        match value.0.as_str() {
+            "joined" => Ok(RoomState::Joined),
+            "left" => Ok(RoomState::Left),
+            "invited" => Ok(RoomState::Invited),
+            "knocked" => Ok(RoomState::Knocked),
+            "banned" => Ok(RoomState::Banned),
+            _ => Err(format!("Invalid room state: {}", value.0)),
+        }
+    }
+}
+
+fn room_state_to_str(state: RoomState) -> &'static str {
+    match state {
+        RoomState::Joined => "joined",
+        RoomState::Left => "left",
+        RoomState::Invited => "invited",
+        RoomState::Knocked => "knocked",
+        RoomState::Banned => "banned",
+    }
+}
+
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
 struct OptionAliasDbParser(Option<String>);
 
 impl TryFrom<OptionAliasDbParser> for Option<OwnedRoomAliasId> {
