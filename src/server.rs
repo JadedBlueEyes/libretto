@@ -5,7 +5,8 @@ use axum::{
 };
 use color_eyre::eyre;
 use futures::StreamExt;
-use matrix_sdk::Client;
+use matrix_sdk::{Client, media::MediaFormat};
+use ruma::events::room::MediaSource;
 
 use crate::error::AppError;
 use crate::room_to_html::{RoomListTemplate, RoomTemplate};
@@ -20,6 +21,7 @@ use askama::Template;
 pub fn build_router(client: Client) -> Router {
     Router::new()
         .route("/room/{room_id}", get(room))
+        .route("/media/plain/full/{media_id}", get(load_media_file))
         .route("/", get(index))
         .fallback(get(crate::assets::static_service::<Dist>))
         .with_state(client)
@@ -96,6 +98,18 @@ pub async fn room(
         events: timeline,
     };
     Ok(Html(template.render().map_err(|e| eyre::eyre!(e))?).into_response())
+}
+
+pub async fn load_media_file(
+    extract::State(client): extract::State<Client>,
+    extract::Path(media_id): extract::Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    let request = matrix_sdk::media::MediaRequestParameters {
+        source: MediaSource::Plain(media_id.into()),
+        format: MediaFormat::File,
+    };
+    let media = client.media().get_media_content(&request, true).await?;
+    Ok(media.into_response())
 }
 
 /// Handles graceful shutdown signals (Ctrl+C, SIGTERM).

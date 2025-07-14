@@ -50,7 +50,7 @@
                     <div class="room-avatar">
 
                         {% if let Some(avatar_url) = room.avatar_url %}
-                        <img src="{{ avatar_url.to_string() }}" alt="{{ room.name.to_string() }}">
+                        <img src="/media/plain/full/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ room.name.to_string() }}">
                         {% else %}
                         {{ room.name_initial() }}
                         {% endif %}

@@ -1,3 +1,22 @@
+<div class="sender-avatar">
+    {% if let Some(profile) = event.sender_profile %}
+        {% if let Some(avatar_url) = profile.avatar_url %}
+            <img class="avatar" src="/media/plain/full/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}">
+        {% else %}
+            <div class="avatar-fallback">
+                {% if let Some(display_name) = profile.display_name %}
+                    {{ display_name }}
+                {% else %}
+                    {{ event.sender.as_str() }}
+                {% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="avatar-fallback">
+            {{ event.sender.as_str() }}
+        </div>
+    {% endif %}
+</div>
 <div class="sender-profile">
     {% if let Some(profile) = event.sender_profile %}
         <div class="sender-name">
