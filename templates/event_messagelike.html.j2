@@ -1,7 +1,7 @@
 <div class="sender-avatar">
     {% if let Some(profile) = event.sender_profile %}
         {% if let Some(avatar_url) = profile.avatar_url %}
-            <img class="avatar" src="/media/plain/full/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}">
+            <img class="avatar" src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}" loading="lazy">
         {% else %}
             <div class="avatar-fallback">
                 {% if let Some(display_name) = profile.display_name %}

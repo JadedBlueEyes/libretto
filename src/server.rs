@@ -1,11 +1,15 @@
 use axum::{
     Router, extract,
+    http::header,
     response::{Html, IntoResponse},
     routing::get,
 };
 use color_eyre::eyre;
 use futures::StreamExt;
-use matrix_sdk::{Client, media::MediaFormat};
+use matrix_sdk::{
+    Client,
+    media::{MediaFormat, MediaThumbnailSettings},
+};
 use ruma::events::room::MediaSource;
 
 use crate::error::AppError;
@@ -21,7 +25,7 @@ use askama::Template;
 pub fn build_router(client: Client) -> Router {
     Router::new()
         .route("/room/{room_id}", get(room))
-        .route("/media/plain/full/{media_id}", get(load_media_file))
+        .route("/media/plain/{dimensions}/{media_id}", get(load_media_file))
         .route("/", get(index))
         .fallback(get(crate::assets::static_service::<Dist>))
         .with_state(client)
@@ -102,14 +106,33 @@ pub async fn room(
 
 pub async fn load_media_file(
     extract::State(client): extract::State<Client>,
-    extract::Path(media_id): extract::Path<String>,
+    extract::Path((dimensions, media_id)): extract::Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
     let request = matrix_sdk::media::MediaRequestParameters {
         source: MediaSource::Plain(media_id.into()),
-        format: MediaFormat::File,
+        format: match dimensions.as_str() {
+            "file" | "full" => MediaFormat::File,
+            dimension_string if dimension_string.starts_with("thumbnail:") => {
+                let (width, height) = dimension_string[10..].split_once('x').unwrap_or_default();
+                MediaFormat::Thumbnail(MediaThumbnailSettings {
+                    width: width.parse().unwrap_or_default(),
+                    height: height.parse().unwrap_or_default(),
+                    method: ruma::media::Method::Crop,
+                    animated: true,
+                })
+            }
+            _ => return Err(eyre::format_err!("Invalid dimension format").into()),
+        },
     };
     let media = client.media().get_media_content(&request, true).await?;
-    Ok(media.into_response())
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/octet-stream"),
+            (header::CONTENT_DISPOSITION, "attachment"),
+            (header::CACHE_CONTROL, "max-age=31536000"),
+        ],
+        media.into_response(),
+    ))
 }
 
 /// Handles graceful shutdown signals (Ctrl+C, SIGTERM).
