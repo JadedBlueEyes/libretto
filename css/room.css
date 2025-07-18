@@ -64,7 +64,7 @@ div.timeline-event {
 		"avatar avatar-gap content content";
 
 	&:target {
-		background-color: oklab(from yellow 0.4 a b);
+		background-color: oklab(from yellow .6 a b / 0.4);
 	}
 
 	.sender-profile {
