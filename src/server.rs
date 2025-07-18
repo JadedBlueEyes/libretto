@@ -12,13 +12,13 @@ use matrix_sdk::{
 };
 use ruma::events::room::MediaSource;
 
-use crate::error::AppError;
 use crate::room_to_html::{RoomListTemplate, RoomTemplate};
 use crate::timeline::build_timeline_event;
 use crate::{
     assets::Dist,
     room_list::{RoomList, room_to_list_entry},
 };
+use crate::{error::AppError, timeline::TimelineEvent};
 use askama::Template;
 
 /// Sets up the Axum router with all routes and state.
@@ -78,17 +78,28 @@ pub async fn room(
         .get_room(&room_id)
         .ok_or_else(|| eyre::eyre!("Failed to get room"))?;
 
-    let messages = room
-        .messages(assign!(matrix_sdk::room::MessagesOptions::backward(), {limit: 100u8.into()}))
-        .await?;
-    let mut events = messages.chunk;
-    let token = messages.end;
-    events.reverse();
+    let mut timeline: Vec<TimelineEvent> = Vec::new();
+    let mut token: Option<String> = None;
 
-    let timeline = stream::iter(events)
-        .then(|i| build_timeline_event(&client, &room_id, i))
-        .try_collect::<Vec<_>>()
-        .await?;
+    while timeline.len() < 150 {
+        let options = assign!(matrix_sdk::room::MessagesOptions::backward(), {limit: 150u16.into(), from: token});
+        let messages = room.messages(options).await?;
+        let events = messages.chunk;
+        token = messages.end;
+
+        timeline.extend(
+            stream::iter(events)
+                .then(|i| build_timeline_event(&client, &room_id, i))
+                .try_collect::<Vec<_>>()
+                .await?,
+        );
+
+        if token.is_none() {
+            break;
+        }
+    }
+
+    timeline.reverse();
 
     let template = RoomTemplate {
         name: room
