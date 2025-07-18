@@ -86,7 +86,6 @@ div.timeline-event {
 	}
 	.event-content.message-like {
 		grid-area: content;
-		background-color: var(--message-background-color);
 		color: var(--text-color);
 		font-size: var(--message-font-size);
 	}
