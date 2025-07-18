@@ -114,6 +114,10 @@ div.timeline-event {
         } */
 }
 
+div.timeline-event[data-hidden-event=true] {
+    display: none;
+}
+
 pre {
 	width: 100%;
 	max-height: max(50vh, 400px);

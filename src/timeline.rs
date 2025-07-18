@@ -141,6 +141,18 @@ pub struct TimelineEvent {
     pub raw: Box<RawValue>,
 }
 
+impl TimelineEvent {
+    pub(crate) fn is_hidden_event(&self) -> bool {
+        matches!(
+            self.content,
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::Hidden,
+                ..
+            })
+        )
+    }
+}
+
 /// The display name and avatar URL of a room member.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Profile {
@@ -222,7 +234,7 @@ pub struct RepliedToEvent {
     sender_profile: Option<Profile>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MsgLikeKind {
     /// An `m.room.message` event or extensible event, including edits.
     Message(Message),
@@ -236,6 +248,14 @@ pub enum MsgLikeKind {
 pub struct Message {
     pub msgtype: MessageType,
     pub edited: bool,
+}
+
+impl PartialEq for Message {
+    fn eq(&self, other: &Self) -> bool {
+        self.msgtype.msgtype() == other.msgtype.msgtype()
+            && self.edited == other.edited
+            && self.msgtype.body() == other.msgtype.body()
+    }
 }
 
 impl Message {
