@@ -10,13 +10,16 @@ mod error;
 mod server;
 mod session;
 
+use std::time::{Duration, Instant};
+
 use crate::{config::Config, session::load_session_from_db};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
-use matrix_sdk::sync::SyncResponse;
+use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
 use sqlx::{PgPool, postgres::PgPoolOptions};
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::{error, info};
 use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -75,7 +78,7 @@ async fn main() -> eyre::Result<()> {
 
     client.event_cache().subscribe()?;
 
-    crate::client::run(&client, sync_token, db.clone(), &config).await?;
+    crate::client::run(&client, &config).await?;
 
     let app = crate::server::build_router(client.clone());
 
@@ -96,24 +99,53 @@ async fn main() -> eyre::Result<()> {
         let client = client.clone();
 
         async move {
-            let sync_loop = client.sync_with_result_callback(
-                matrix_sdk::config::SyncSettings::default(),
-                |sync_result| async {
-                    // Explicitly specify type so we can disable RA's false positive E0308
-                    let response: SyncResponse = sync_result?;
+            let sync_loop = async {
+                let mut last_sync_time: Option<Instant> = None;
+                let filter =
+                    matrix_sdk::ruma::api::client::filter::FilterDefinition::with_lazy_loading(); // Member lazy loading speeds up initial sync
+                let mut sync_settings = SyncSettings::default().filter(filter.into());
+                let mut backoff = None;
+                if let Some(token) = sync_token {
+                    sync_settings = sync_settings.token(token);
+                }
 
-                    // We persist the token each time to be able to restore our session
-                    crate::session::persist_sync_token(
-                        db.clone(),
-                        client.user_id().expect("to be logged in"),
-                        response.next_batch.clone(),
-                    )
-                    .await
-                    .map_err(|err| matrix_sdk::Error::UnknownError(err.into()))?;
+                loop {
+                    let result: Result<SyncResponse, _> =
+                        client.sync_once(sync_settings.clone()).await;
 
-                    Ok(matrix_sdk::LoopCtrl::Continue)
-                },
-            );
+                    match result {
+                        Ok(response) => {
+                            backoff = None;
+                            match crate::session::persist_sync_token(
+                                db.clone(),
+                                client.user_id().expect("to be logged in"),
+                                response.next_batch.clone(),
+                            )
+                            .await
+                            {
+                                Ok(_) => sync_settings = sync_settings.token(response.next_batch),
+                                Err(err) => error!("Failed to persist sync token: {err:?}"),
+                            }
+                        }
+                        Err(err) => {
+                            error!("Sync error: {}", err);
+                            sleep(Duration::from_secs(backoff.unwrap_or(0))).await;
+                            backoff = Some((backoff.unwrap_or(0) + 1).pow(2));
+                            continue;
+                        }
+                    }
+                    let now = Instant::now();
+
+                    if let Some(t) = last_sync_time {
+                        let duration = now - t;
+                        if duration <= Duration::from_secs(1) {
+                            sleep(Duration::from_secs(1) - duration).await;
+                        }
+                    }
+
+                    last_sync_time = Some(now);
+                }
+            };
             let client = client.clone();
             let db = db.clone();
 

@@ -1,49 +1,12 @@
 use color_eyre::eyre;
+use matrix_sdk::Client;
 use matrix_sdk::ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
-use matrix_sdk::{Client, config::SyncSettings};
 use tracing::{info, trace, warn};
 
-use crate::DatabasePool;
 use crate::config::Config;
-use crate::session::persist_sync_token;
 
-/// Handles initial sync and device management for the Matrix client.
-pub async fn run(
-    client: &Client,
-    initial_sync_token: Option<String>,
-    database: DatabasePool,
-    config: &Config,
-) -> eyre::Result<()> {
-    info!("Launching a first sync...");
-
-    // Enable room members lazy-loading, it will speed up the initial sync a lot
-    let filter = matrix_sdk::ruma::api::client::filter::FilterDefinition::with_lazy_loading();
-    let mut sync_settings = SyncSettings::default().filter(filter.into());
-
-    // Restore the sync where we left off, if available.
-    if let Some(sync_token) = initial_sync_token {
-        sync_settings = sync_settings.token(sync_token);
-    }
-
-    // Ignore messages before the program was launched.
-    loop {
-        match client.sync_once(sync_settings.clone()).await {
-            Ok(response) => {
-                persist_sync_token(
-                    database,
-                    client.user_id().expect("to be logged in"),
-                    response.next_batch,
-                )
-                .await?;
-                break;
-            }
-            Err(error) => {
-                warn!("An error occurred during initial sync: {error}");
-            }
-        }
-    }
-    info!("Initial sync done");
-
+/// Handles device management for the Matrix client.
+pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
     let current_session = client.device_id().map(|d| d.to_owned());
     if let Some(account_config) = &config.account_config
         && account_config.delete_other_devices
