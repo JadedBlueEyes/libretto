@@ -16,7 +16,7 @@ use crate::{config::Config, session::load_session_from_db};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
-use ruma::events::room::message::SyncRoomMessageEvent;
+use ruma::events::AnySyncTimelineEvent;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -100,7 +100,7 @@ async fn main() -> eyre::Result<()> {
         let client = client.clone();
 
         async move {
-            let _event_handler = client.add_event_handler(|ev: SyncRoomMessageEvent| async move {
+            let _event_handler = client.add_event_handler(|ev: AnySyncTimelineEvent| async move {
                 info!("Received a message event: {:?}", ev);
             });
             let sync_loop = async {
