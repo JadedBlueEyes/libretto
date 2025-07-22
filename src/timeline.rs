@@ -113,6 +113,15 @@ async fn messagelike_to_content(
                 thread_root: None,
             })
         }
+        AnySyncMessageLikeEvent::RoomEncrypted(_) => {
+            let reactions = ReactionsByKeyBySender::default();
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::UnableToDecrypt,
+                reactions,
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
         _ => Err(eyre::eyre!(
             "Unsupported message-like event type {msg_like:?}"
         ))?,
