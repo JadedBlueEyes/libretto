@@ -16,7 +16,6 @@ use crate::{config::Config, session::load_session_from_db};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
-use ruma::events::AnySyncTimelineEvent;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -98,11 +97,9 @@ async fn main() -> eyre::Result<()> {
 
     let sync_task = tokio::spawn({
         let client = client.clone();
-
         async move {
-            let _event_handler = client.add_event_handler(|ev: AnySyncTimelineEvent| async move {
-                info!("Received a message event: {:?}", ev);
-            });
+            let user_id = client.user_id().expect("to be logged in");
+
             let sync_loop = async {
                 let mut last_sync_time: Option<Instant> = None;
                 let filter =
@@ -122,12 +119,21 @@ async fn main() -> eyre::Result<()> {
                             backoff = None;
                             match crate::session::persist_sync_token(
                                 db.clone(),
-                                client.user_id().expect("to be logged in"),
+                                user_id,
                                 response.next_batch.clone(),
                             )
                             .await
                             {
-                                Ok(_) => sync_settings = sync_settings.token(response.next_batch),
+                                Ok(_) => {
+                                    sync_settings = sync_settings.token(response.next_batch);
+                                    if !(response.rooms.invited.is_empty()
+                                        && response.rooms.joined.is_empty()
+                                        && response.rooms.knocked.is_empty()
+                                        && response.rooms.left.is_empty())
+                                    {
+                                        dbg!(user_id, response.rooms);
+                                    }
+                                }
                                 Err(err) => error!("Failed to persist sync token: {err:?}"),
                             }
                         }
