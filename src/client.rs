@@ -92,5 +92,30 @@ pub async fn sync_handler(
     )
     .await?;
 
+    let timeline_updates = response
+        .rooms
+        .joined
+        .iter()
+        .map(|(id, update)| (id, update.timeline.clone()))
+        .chain(
+            response
+                .rooms
+                .left
+                .iter()
+                .map(|(id, update)| (id, update.timeline.clone())),
+        )
+        .filter(|(_id, update)| update.prev_batch.is_some() || !update.events.is_empty());
+    timeline_updates.for_each(|(id, update)| {
+        dbg!(id, &update);
+        if update.limited {
+            warn!("Got limited timeline from update")
+        }
+        // timeline::update_timeline(id, update, user_id, &mut *tx).await
+    });
+
+    // timeline::update_timelines(&timeline_updates, user_id, &mut *tx).await?;
+
+    // response.rooms.left.
+
     Ok(())
 }
