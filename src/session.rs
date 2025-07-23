@@ -5,7 +5,7 @@ use matrix_sdk::{Client, SessionMeta, SessionTokens, authentication::matrix::Mat
 use ruma::UserId;
 use serde::{Deserialize, Serialize};
 
-use crate::DatabasePool;
+use crate::{DatabaseConnection, DatabasePool};
 
 /// The data needed to re-build a client.
 #[derive(Debug, Serialize, Deserialize)]
@@ -40,7 +40,10 @@ pub struct FullSession {
 }
 
 /// Insert a new account session into the database.
-pub async fn insert_account_session(db: &DatabasePool, session: &FullSession) -> eyre::Result<()> {
+pub async fn insert_account_session(
+    tx: &mut DatabaseConnection,
+    session: &FullSession,
+) -> eyre::Result<()> {
     sqlx::query!(
         // language=PostgreSQL
         r#"
@@ -64,7 +67,7 @@ pub async fn insert_account_session(db: &DatabasePool, session: &FullSession) ->
         session.client_session.db_path,
         session.sync_token
     )
-    .execute(db)
+    .execute(tx)
     .await?;
     Ok(())
 }
@@ -143,7 +146,7 @@ pub async fn restore_session(
 /// Note that this is needed only when using `sync_once`. Other sync methods get
 /// the sync token from the store.
 pub async fn persist_sync_token(
-    database: DatabasePool,
+    tx: &mut DatabaseConnection,
     user_id: &UserId,
     sync_token: String,
 ) -> eyre::Result<()> {
@@ -152,7 +155,7 @@ pub async fn persist_sync_token(
         sync_token,
         user_id.to_string()
     )
-    .execute(&database)
+    .execute(tx)
     .await?;
 
     Ok(())

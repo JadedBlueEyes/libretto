@@ -6,7 +6,7 @@ use ruma::UserId;
 use tracing::{info, trace, warn};
 
 use crate::config::Config;
-use crate::{DatabasePool, room_list};
+use crate::{DatabaseConnection, room_list};
 
 /// Handles device management for the Matrix client.
 pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
@@ -69,7 +69,7 @@ pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
 }
 
 pub async fn sync_handler(
-    db: &DatabasePool,
+    tx: &mut DatabaseConnection,
     client: &matrix_sdk::Client,
     user_id: &UserId,
     response: &SyncResponse,
@@ -88,7 +88,7 @@ pub async fn sync_handler(
             .collect::<Vec<_>>()
             .as_slice(),
         user_id,
-        db,
+        &mut *tx,
     )
     .await?;
 

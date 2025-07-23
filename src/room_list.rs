@@ -9,8 +9,8 @@ use sqlx::FromRow;
 
 use sqlx::types::Json as SqlxJson;
 
-use crate::DatabasePool;
 use crate::error::AppError;
+use crate::{DatabaseConnection, DatabasePool};
 
 /// Represents a room in the room list with additional metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,10 +200,10 @@ async fn get_room_db(
 pub async fn update_rooms(
     rooms: &[matrix_sdk::Room],
     user_id: &UserId,
-    db: &DatabasePool,
+    tx: &mut DatabaseConnection,
 ) -> eyre::Result<()> {
-    let mut tx = db.begin().await?;
-    let forgotten_rooms = room_ids_from_db(user_id, db)
+    // let mut tx = db.begin().await?;
+    let forgotten_rooms = room_ids_from_db(user_id, tx)
         .await?
         .into_iter()
         .filter(|room_id| rooms.iter().any(|room| room.room_id() == room_id))
@@ -281,13 +281,13 @@ pub async fn update_rooms(
         .wrap_err("Failed to upsert room")?;
     }
 
-    tx.commit().await?;
+    // tx.commit().await?;
     Ok(())
 }
 
 pub async fn room_ids_from_db(
     user_id: &UserId,
-    db: &DatabasePool,
+    tx: &mut DatabaseConnection,
 ) -> eyre::Result<Vec<OwnedRoomId>> {
     sqlx::query_scalar!(
         // language=PostgreSQL
@@ -296,7 +296,7 @@ pub async fn room_ids_from_db(
         where user_id = $1"#,
         user_id.as_str()
     )
-    .fetch_all(db)
+    .fetch_all(tx)
     .await?
     .into_iter()
     .map(|r| r.try_into().wrap_err("Failed to convert room ID"))

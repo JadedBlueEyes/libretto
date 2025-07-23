@@ -17,13 +17,15 @@ use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use futures::TryFutureExt;
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
 use tokio::time::sleep;
 use tracing::{error, info};
 use tracing_log::{AsTrace, log::warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-type DatabasePool = PgPool;
+type Database = sqlx::Postgres;
+type DatabasePool = sqlx::Pool<Database>;
+type DatabaseConnection = <Database as sqlx::Database>::Connection;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> eyre::Result<()> {
@@ -46,6 +48,7 @@ async fn main() -> eyre::Result<()> {
         .connect(&config.database_url)
         .await
         .context("Failed to connect to database")?;
+    // db.begin().await
 
     sqlx::migrate!()
         .run(&db)
@@ -72,7 +75,15 @@ async fn main() -> eyre::Result<()> {
             .expect("AccountConfig required for login");
         let (client, session) = crate::auth::login(&data_dir, account_config).await?;
 
-        crate::session::insert_account_session(&db, &session).await?;
+        let _ = db
+            .acquire()
+            .map_err(|e| e.into())
+            .and_then(async |mut tx| {
+                crate::session::insert_account_session(&mut tx, &session).await
+            })
+            .await
+            .inspect_err(|e| warn!("Error doing initial room update: {e}"));
+
         (client, session.sync_token)
     };
 
@@ -97,16 +108,23 @@ async fn main() -> eyre::Result<()> {
 
     let sync_task = tokio::spawn({
         let client = client.clone();
+        let db = db.clone();
         async move {
             let user_id = client.user_id().expect("to be logged in");
 
-            let _ = room_list::update_rooms(
-                client.rooms().into_iter().collect::<Vec<_>>().as_slice(),
-                user_id,
-                &db,
-            )
-            .await
-            .inspect_err(|e| warn!("Error doing initial room update: {e}"));
+            let _ = db
+                .acquire()
+                .map_err(|e| e.into())
+                .and_then(async |mut tx| {
+                    room_list::update_rooms(
+                        client.rooms().into_iter().collect::<Vec<_>>().as_slice(),
+                        user_id,
+                        &mut tx,
+                    )
+                    .await
+                })
+                .await
+                .inspect_err(|e| warn!("Error doing initial room update: {e}"));
 
             let sync_loop = async {
                 let mut last_sync_time: Option<Instant> = None;
@@ -119,34 +137,44 @@ async fn main() -> eyre::Result<()> {
                 }
 
                 loop {
-                    let result: Result<SyncResponse, _> =
-                        client.sync_once(sync_settings.clone()).await;
+                    let result: eyre::Result<String> = client
+                        .sync_once(sync_settings.clone())
+                        .map_err(|e| e.into())
+                        .and_then(async |response: SyncResponse| {
+                            let tx = db.begin().await?;
+
+                            if !(response.rooms.invited.is_empty()
+                                && response.rooms.joined.is_empty()
+                                && response.rooms.knocked.is_empty()
+                                && response.rooms.left.is_empty())
+                            {
+                                // dbg!(user_id, &response.rooms);
+                            }
+
+                            Ok((response, tx))
+                        })
+                        .and_then(async |(response, mut tx)| {
+                            backoff = None;
+                            sync_handler(&mut tx, &client, user_id, &response).await?;
+                            crate::session::persist_sync_token(
+                                &mut tx,
+                                user_id,
+                                response.next_batch.clone(),
+                            )
+                            .await?;
+                            Ok((response, tx))
+                        })
+                        .and_then(async |(response, tx)| {
+                            tx.commit().await?;
+
+                            Ok(response.next_batch)
+                        })
+                        .await;
 
                     match result {
-                        Ok(response) => {
-                            backoff = None;
-                            match sync_handler(&db, &client, user_id, &response)
-                                .and_then(|_| {
-                                    crate::session::persist_sync_token(
-                                        db.clone(),
-                                        user_id,
-                                        response.next_batch.clone(),
-                                    )
-                                })
-                                .await
-                            {
-                                Ok(_) => {
-                                    sync_settings = sync_settings.token(response.next_batch);
-                                    if !(response.rooms.invited.is_empty()
-                                        && response.rooms.joined.is_empty()
-                                        && response.rooms.knocked.is_empty()
-                                        && response.rooms.left.is_empty())
-                                    {
-                                        dbg!(user_id, response.rooms);
-                                    }
-                                }
-                                Err(err) => error!("Failed to persist sync token: {err:?}"),
-                            }
+                        Ok(next_batch) => {
+                            // trace!("Sync completed");
+                            sync_settings = sync_settings.token(next_batch);
                         }
                         Err(err) => {
                             error!("Sync error: {}", err);
@@ -180,5 +208,6 @@ async fn main() -> eyre::Result<()> {
         .with_graceful_shutdown(crate::server::shutdown_signal())
         .await?;
     sync_task.await?;
+    db.close().await;
     Ok(())
 }
