@@ -1,9 +1,12 @@
 use color_eyre::eyre;
 use matrix_sdk::Client;
 use matrix_sdk::ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
+use matrix_sdk::sync::SyncResponse;
+use ruma::UserId;
 use tracing::{info, trace, warn};
 
 use crate::config::Config;
+use crate::{DatabasePool, room_list};
 
 /// Handles device management for the Matrix client.
 pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
@@ -61,6 +64,33 @@ pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
             warn!("No device ID found, cannot name device");
         }
     }
+
+    Ok(())
+}
+
+pub async fn sync_handler(
+    db: &DatabasePool,
+    client: &matrix_sdk::Client,
+    user_id: &UserId,
+    response: &SyncResponse,
+) -> eyre::Result<()> {
+    let updated_rooms = response
+        .rooms
+        .invited
+        .keys()
+        .chain(response.rooms.joined.keys())
+        .chain(response.rooms.knocked.keys())
+        .chain(response.rooms.left.keys());
+
+    room_list::update_rooms(
+        updated_rooms
+            .filter_map(|r| client.get_room(r))
+            .collect::<Vec<_>>()
+            .as_slice(),
+        user_id,
+        db,
+    )
+    .await?;
 
     Ok(())
 }

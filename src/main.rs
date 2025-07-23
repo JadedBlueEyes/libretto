@@ -12,15 +12,15 @@ mod session;
 
 use std::time::{Duration, Instant};
 
-use crate::{config::Config, session::load_session_from_db};
+use crate::{client::sync_handler, config::Config, session::load_session_from_db};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
+use futures::TryFutureExt;
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::time::sleep;
-use tokio_stream::StreamExt;
 use tracing::{error, info};
-use tracing_log::AsTrace;
+use tracing_log::{AsTrace, log::warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 type DatabasePool = PgPool;
@@ -100,6 +100,14 @@ async fn main() -> eyre::Result<()> {
         async move {
             let user_id = client.user_id().expect("to be logged in");
 
+            let _ = room_list::update_rooms(
+                client.rooms().into_iter().collect::<Vec<_>>().as_slice(),
+                user_id,
+                &db,
+            )
+            .await
+            .inspect_err(|e| warn!("Error doing initial room update: {e}"));
+
             let sync_loop = async {
                 let mut last_sync_time: Option<Instant> = None;
                 let filter =
@@ -117,12 +125,15 @@ async fn main() -> eyre::Result<()> {
                     match result {
                         Ok(response) => {
                             backoff = None;
-                            match crate::session::persist_sync_token(
-                                db.clone(),
-                                user_id,
-                                response.next_batch.clone(),
-                            )
-                            .await
+                            match sync_handler(&db, &client, user_id, &response)
+                                .and_then(|_| {
+                                    crate::session::persist_sync_token(
+                                        db.clone(),
+                                        user_id,
+                                        response.next_batch.clone(),
+                                    )
+                                })
+                                .await
                             {
                                 Ok(_) => {
                                     sync_settings = sync_settings.token(response.next_batch);
@@ -156,81 +167,8 @@ async fn main() -> eyre::Result<()> {
                     last_sync_time = Some(now);
                 }
             };
-            let client = client.clone();
-            let db = db.clone();
-
-            let room_updates = tokio::spawn(async move {
-                let (mut rooms, mut rooms_stream) = client.rooms_stream();
-
-                room_list::update_rooms(
-                    rooms
-                        .iter()
-                        .map(|r| r.to_owned())
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                    client.user_id().expect("to be logged in"),
-                    &db,
-                )
-                .await
-                .unwrap();
-                // Compare from database to find deleted and upsert the rest
-
-                while let Some(room_changes) = rooms_stream.next().await {
-                    info!("Rooms have been updated");
-                    for diff in room_changes {
-                        // match diff {
-                        //     VectorDiff::Append { ref values } => {
-                        //         // Add values
-                        //     }
-                        //     VectorDiff::Clear => {
-                        //         // Delete all
-                        //     }
-                        //     VectorDiff::PushFront { ref value }
-                        //     | VectorDiff::PushBack { ref value } => {
-                        //         // Add value
-                        //     }
-                        //     VectorDiff::PopFront => {
-                        //         // Remove 0
-                        //     }
-                        //     VectorDiff::PopBack => {
-                        //         // Remove last
-                        //     }
-                        //     VectorDiff::Insert { index, ref value } => {
-                        //         // Add last
-                        //     }
-                        //     VectorDiff::Set { index, ref value } => {
-                        //         // Compare index - if the same room ID, update, else remove and insert
-                        //     }
-                        //     VectorDiff::Remove { index } => {
-                        //         // Remove index
-                        //     }
-                        //     VectorDiff::Truncate { length } => {
-                        //         // Remove from point to end
-                        //     }
-                        //     VectorDiff::Reset { ref values } => {
-                        //         // Compare from database to find deleted and upsert the rest
-                        //     }
-                        // }
-                        // In the meantime, just do a full update every time:
-
-                        diff.apply(&mut rooms);
-                        room_list::update_rooms(
-                            rooms
-                                .iter()
-                                .map(|r| r.to_owned())
-                                .collect::<Vec<_>>()
-                                .as_slice(),
-                            client.user_id().expect("to be logged in"),
-                            &db,
-                        )
-                        .await
-                        .unwrap();
-                    }
-                }
-            });
 
             tokio::select! {
-                _ = room_updates => info!("Room updates finished"),
                 _ = sync_loop => info!("Sync loop finished"),
                 _ = signal => info!("Sync shutdown in progress"),
             }
