@@ -142,15 +142,6 @@ async fn main() -> eyre::Result<()> {
                         .map_err(|e| e.into())
                         .and_then(async |response: SyncResponse| {
                             let tx = db.begin().await?;
-
-                            if !(response.rooms.invited.is_empty()
-                                && response.rooms.joined.is_empty()
-                                && response.rooms.knocked.is_empty()
-                                && response.rooms.left.is_empty())
-                            {
-                                // dbg!(user_id, &response.rooms);
-                            }
-
                             Ok((response, tx))
                         })
                         .and_then(async |(response, mut tx)| {
