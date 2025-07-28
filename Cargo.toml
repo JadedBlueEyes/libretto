@@ -17,7 +17,8 @@ futures-util = "0.3.31"
 icu = "2.0.0"
 jiff = "0.2.15"
 listenfd = "1.0.2"
-matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk.git", rev="40e3cd3c224b359c312c1f3c55b0d4f7b2be4346", features = ["eyre", "native-tls"], default-features = true}
+# git = "https://github.com/matrix-org/matrix-rust-sdk.git", rev="40e3cd3c224b359c312c1f3c55b0d4f7b2be4346"
+matrix-sdk = { version = "0.13.0", features = ["eyre", "native-tls"], default-features = true}
 rand = "0.9.1"
 regex = "1.11.1"
 reqwest = "0.12.19"
