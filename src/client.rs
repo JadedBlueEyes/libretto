@@ -109,7 +109,13 @@ pub async fn sync_handler(
 
     for (room_id, update) in timeline_updates {
         if update.limited {
-            warn!("Got limited timeline from update {room_id}")
+            warn!("Got limited timeline from update {room_id}");
+            sqlx::query!(
+                "DELETE FROM timeline WHERE room_id = $1",
+                room_id.to_string()
+            )
+            .execute(&mut *tx)
+            .await?;
         }
 
         for event in update.events {
@@ -167,7 +173,7 @@ pub async fn sync_handler(
                             transaction_id, unsigned, content, event_type,
                             relates_to, relation_type, state_key, megolm_session_id
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                        ON CONFLICT (room_id, event_id) DO UPDATE SET
+                        ON CONFLICT (room_id, user_id, event_id) DO UPDATE SET
                             timestamp = EXCLUDED.timestamp
                         RETURNING rowid
                         "#,
@@ -215,6 +221,20 @@ pub async fn sync_handler(
                         .execute(&mut *tx)
                         .await?;
                     }
+
+                    // Insert into timeline
+                    sqlx::query(
+                        r#"
+                        INSERT INTO timeline (room_id, user_id, event_rowid)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (event_rowid) DO NOTHING
+                        "#,
+                    )
+                    .bind(room_id.to_string())
+                    .bind(user_id.to_string())
+                    .bind(event_rowid)
+                    .execute(&mut *tx)
+                    .await?;
                 }
                 Err(e) => {
                     warn!("Failed to deserialize event: {:?}", e);
