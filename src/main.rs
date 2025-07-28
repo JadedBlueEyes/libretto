@@ -169,8 +169,9 @@ async fn main() -> eyre::Result<()> {
                         }
                         Err(err) => {
                             error!("Sync error: {}", err);
+                            warn!("Sleeping {} seconds", 2u64.pow(backoff.unwrap_or(0)));
                             sleep(Duration::from_secs(2u64.pow(backoff.unwrap_or(0)))).await;
-                            backoff = Some((backoff.unwrap_or(0) + 1).max(7));
+                            backoff = Some((backoff.unwrap_or(0) + 1).min(7));
                             continue;
                         }
                     }
