@@ -10,6 +10,7 @@ use matrix_sdk::ruma::{
     html::RemoveReplyFallback,
 };
 use serde_json::value::RawValue;
+use tracing::warn;
 
 pub async fn build_timeline_event(
     client: &matrix_sdk::Client,
@@ -122,9 +123,16 @@ async fn messagelike_to_content(
                 thread_root: None,
             })
         }
-        _ => Err(eyre::eyre!(
-            "Unsupported message-like event type {msg_like:?}"
-        ))?,
+        _ => {
+            let reactions = ReactionsByKeyBySender::default();
+            warn!("Unsupported message like event type: {:?}", msg_like);
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::UnsupportedType,
+                reactions,
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
     };
     Ok(content)
 }
@@ -252,6 +260,8 @@ pub enum MsgLikeKind {
     Redacted,
 
     UnableToDecrypt,
+
+    UnsupportedType,
 }
 #[derive(Clone, Debug)]
 pub struct Message {

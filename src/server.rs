@@ -81,7 +81,7 @@ pub async fn room(
     let mut timeline: Vec<TimelineEvent> = Vec::new();
     let mut token: Option<String> = None;
 
-    while timeline.len() < 150 {
+    while timeline.len() < 250 {
         let options = assign!(matrix_sdk::room::MessagesOptions::backward(), {limit: 150u16.into(), from: token});
         let messages = room.messages(options).await?;
         let events = messages.chunk;

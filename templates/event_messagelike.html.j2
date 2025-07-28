@@ -55,6 +55,10 @@
         {% when MsgLikeKind::Hidden %}
             <div class="hidden-message">
             </div>
+        {% when MsgLikeKind::UnsupportedType %}
+            <div class="unsupported-type">
+                Unsupported message type
+            </div>
     {% endmatch %}
     {% if let Some(in_reply_to_details) = message_like_event.in_reply_to %}
         <div class="in-reply-to">

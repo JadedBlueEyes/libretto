@@ -19,8 +19,8 @@ use futures::TryFutureExt;
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
 use sqlx::postgres::PgPoolOptions;
 use tokio::time::sleep;
-use tracing::{error, info};
-use tracing_log::{AsTrace, log::warn};
+use tracing::{error, info, warn};
+use tracing_log::AsTrace;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 type Database = sqlx::Postgres;
