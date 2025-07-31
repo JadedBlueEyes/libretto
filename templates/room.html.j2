@@ -18,6 +18,9 @@
             {% if let Some(prev_page) = prev_page %}
             <p><a href={{prev_page}}>Prev page</a></p>
             {% endif %}
+            {% if let Some(next_page) = next_page %}
+            <p><a href={{next_page}}>Next page</a></p>
+            {% endif %}
         </div>
         <div class="timeline">
         <div class="timeline-list">

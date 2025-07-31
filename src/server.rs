@@ -23,6 +23,7 @@ use crate::{
     timeline::{DbTimelineEvent, build_timeline_event_from_db},
 };
 use askama::Template;
+use sqlx::Row;
 
 #[derive(Clone, extract::FromRef)]
 struct AppState {
@@ -68,6 +69,7 @@ pub async fn room(
 ) -> Result<impl IntoResponse, AppError> {
     room_internal(client, db, room_id, None).await
 }
+
 pub async fn room_page(
     extract::State(client): extract::State<Client>,
     extract::State(db): extract::State<DatabasePool>,
@@ -114,8 +116,8 @@ pub async fn room_internal(
     let mut timeline: Vec<TimelineEvent> = Vec::new();
     let limit = 250;
 
-    // Fetch timeline events from the database
-    let rows: Vec<DbTimelineEvent> = sqlx::query_as(
+    // Fetch timeline events from the database (fetch limit+1 to check for next page)
+    let mut rows: Vec<DbTimelineEvent> = sqlx::query_as(
                     r#"SELECT
                         event.rowid, timeline.rowid as timeline_rowid,
                         event.room_id, event_id, sender, event_type, state_key,
@@ -124,20 +126,56 @@ pub async fn room_internal(
                         megolm_session_id, last_edit_rowid
                     FROM timeline
                     JOIN event ON event.rowid = timeline.event_rowid
-                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid < $3)
+                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)
                     ORDER BY timeline.rowid DESC
-                    LIMIT $4"#,
+                    LIMIT $4;"#,
                 )
                 .bind(user_id.as_str())
                 .bind(room_id.as_str())
                 .bind(last_rowid.unwrap_or(0))
-                .bind(limit as i32)
+                .bind((limit + 1) as i32)
                 .fetch_all(&db)
                 .await?;
 
-    // let is_room_encrypted = room.encryption_state().is_encrypted();
+    let mut hit_end_of_timeline = false;
+    let mut next_page = None;
+    let mut prev_page = None;
 
-    let hit_end_of_timeline = rows.len() < limit;
+    // If we fetched more than limit, there is a next page
+    if rows.len() > limit {
+        let next_row = rows.last().unwrap();
+        prev_page = Some(format!("/room/{room_id}/{}", next_row.timeline_rowid));
+        rows.truncate(limit);
+    } else {
+        hit_end_of_timeline = true;
+    }
+
+    // Only show prev_page if this is not the first page (i.e., last_rowid is Some and not 0)
+    if let Some(last_rowid) = last_rowid
+        && last_rowid != 0
+    {
+        let row = sqlx::query(
+            r#"SELECT timeline.rowid as timeline_rowid
+                    FROM timeline
+                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND timeline.rowid >= $3
+                    ORDER BY timeline.rowid ASC
+                    OFFSET $4 LIMIT 1;"#,
+        )
+        .bind(user_id.as_str())
+        .bind(room_id.as_str())
+        .bind(last_rowid)
+        .bind(limit as i32)
+        .fetch_one(&db)
+        .await
+        .ok();
+
+        if let Some(row) = row {
+            next_page = Some(format!(
+                "/room/{room_id}/{}",
+                row.get::<i32, &str>("timeline_rowid")
+            ));
+        }
+    }
 
     // Convert database rows to TimelineEvent objects
     for row in rows {
@@ -149,6 +187,8 @@ pub async fn room_internal(
         }
     }
 
+    timeline.reverse();
+
     let template = RoomTemplate {
         name: room
             .display_name()
@@ -158,7 +198,8 @@ pub async fn room_internal(
         room_id: &room_id,
         hit_end_of_timeline,
         room: &room,
-        prev_page: Some(format!("/room/{room_id}/{limit}")),
+        prev_page,
+        next_page,
         events: timeline,
     };
 

@@ -23,6 +23,7 @@ pub struct RoomTemplate<'a> {
     pub events: Vec<TimelineEvent>,
     pub hit_end_of_timeline: bool,
     pub prev_page: Option<String>,
+    pub next_page: Option<String>,
     pub room: &'a matrix_sdk::room::Room,
 }
 fn html_body(formatted_body: &FormattedBody) -> Option<&str> {
