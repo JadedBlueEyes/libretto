@@ -82,7 +82,6 @@ pub async fn room_internal(
     room_id: String,
     last_rowid: Option<i32>,
 ) -> Result<impl IntoResponse, AppError> {
-    dbg!(&room_id, &last_rowid);
     use matrix_sdk::ruma::{OwnedRoomId, RoomAliasId};
 
     let room_id: OwnedRoomId = if let Ok(alias) = <&RoomAliasId>::try_from(room_id.as_str()) {
