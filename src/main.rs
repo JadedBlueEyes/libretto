@@ -91,7 +91,7 @@ async fn main() -> eyre::Result<()> {
 
     crate::client::run(&client, &config).await?;
 
-    let app = crate::server::build_router(client.clone());
+    let app = crate::server::build_router(client.clone(), db.clone());
 
     // try to first get a socket from listenfd, if that does not give us
     // one (eg: no systemd or systemfd), open on port 3000 instead.

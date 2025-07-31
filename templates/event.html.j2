@@ -1,4 +1,4 @@
-<div class="timeline-event" data-raw-event="{{ event.raw.get() }}" {% if let Some(event_id) = event.event_id %}data-event-id="{{ event_id }}" id="event-{{ event_id }}" {% endif %}data-hidden-event={{ event.is_hidden_event() }}>
+<div class="timeline-event" data-raw-event-content="{{ event.raw_content }}" data-event-id="{{ event.event_id }}" id="event-{{ event.event_id }}" data-hidden-event={{ event.is_hidden_event() }}>
     {% match event.content %}
         {% when TimelineItemContent::MsgLike(msg_like_content) %}
             {% set message_like_event = msg_like_content %}

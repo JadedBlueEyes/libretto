@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 askama = { version = "0.14.0", features = ["serde_json"] }
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["macros"] }
 base64 = "0.22.1"
 clap = { version = "4.5.36", features = ["derive", "env"] }
 clap-verbosity-flag = "3.0.2"

@@ -15,6 +15,9 @@
         <div class="room-header">
             <h1>{{ name }}</h1>
             <p>Room ID: {{ room_id | safe }}</p>
+            {% if let Some(prev_page) = prev_page %}
+            <p><a href={{prev_page}}>Prev page</a></p>
+            {% endif %}
         </div>
         <div class="timeline">
         <div class="timeline-list">

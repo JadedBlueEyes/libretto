@@ -5,30 +5,40 @@ use axum::{
     routing::get,
 };
 use color_eyre::eyre;
-use futures::StreamExt;
 use matrix_sdk::{
     Client,
     media::{MediaFormat, MediaThumbnailSettings},
 };
 use ruma::events::room::MediaSource;
+use tracing_log::log::warn;
 
-use crate::room_to_html::{RoomListTemplate, RoomTemplate};
-use crate::timeline::build_timeline_event;
+use crate::timeline::TimelineEvent;
+use crate::{DatabasePool, error::AppError};
 use crate::{
     assets::Dist,
     room_list::{RoomList, room_to_list_entry},
 };
-use crate::{error::AppError, timeline::TimelineEvent};
+use crate::{
+    room_to_html::{RoomListTemplate, RoomTemplate},
+    timeline::{DbTimelineEvent, build_timeline_event_from_db},
+};
 use askama::Template;
 
+#[derive(Clone, extract::FromRef)]
+struct AppState {
+    client: Client,
+    db: DatabasePool,
+}
+
 /// Sets up the Axum router with all routes and state.
-pub fn build_router(client: Client) -> Router {
+pub fn build_router(client: Client, db: DatabasePool) -> Router {
     Router::new()
+        .route("/room/{room_id}/{page}", get(room_page))
         .route("/room/{room_id}", get(room))
         .route("/media/plain/{dimensions}/{media_id}", get(load_media_file))
         .route("/", get(index))
         .fallback(get(crate::assets::static_service::<Dist>))
-        .with_state(client)
+        .with_state(AppState { db, client })
 }
 
 /// Handler for the index route, listing all rooms.
@@ -48,14 +58,32 @@ pub async fn index(
 
     Ok(Html(template.render().map_err(|e| eyre::eyre!(e))?).into_response())
 }
+//
 
 /// Handler for the room route, showing timeline for a room.
 pub async fn room(
     extract::State(client): extract::State<Client>,
+    extract::State(db): extract::State<DatabasePool>,
     extract::Path(room_id): extract::Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    use futures::{TryStreamExt, stream};
-    use matrix_sdk::ruma::{OwnedRoomId, RoomAliasId, assign};
+    room_internal(client, db, room_id, None).await
+}
+pub async fn room_page(
+    extract::State(client): extract::State<Client>,
+    extract::State(db): extract::State<DatabasePool>,
+    extract::Path((room_id, last_rowid)): extract::Path<(String, Option<i32>)>,
+) -> Result<impl IntoResponse, AppError> {
+    room_internal(client, db, room_id, last_rowid).await
+}
+/// Handler for the room route, showing timeline for a room.
+pub async fn room_internal(
+    client: Client,
+    db: DatabasePool,
+    room_id: String,
+    last_rowid: Option<i32>,
+) -> Result<impl IntoResponse, AppError> {
+    dbg!(&room_id, &last_rowid);
+    use matrix_sdk::ruma::{OwnedRoomId, RoomAliasId};
 
     let room_id: OwnedRoomId = if let Ok(alias) = <&RoomAliasId>::try_from(room_id.as_str()) {
         client.resolve_room_alias(alias).await?.room_id
@@ -65,41 +93,62 @@ pub async fn room(
             .expect("Room ID was not a valid ID or alias!")
     };
 
-    client
-        .encryption()
-        .backups()
-        .download_room_keys_for_room(&room_id)
-        .await
-        .inspect_err(|e| {
-            tracing::error!("Failed to download room keys for room {room_id}: {e}");
-        })?;
+    // client
+    //     .encryption()
+    //     .backups()
+    //     .download_room_keys_for_room(&room_id)
+    //     .await
+    //     .inspect_err(|e| {
+    //         tracing::error!("Failed to download room keys for room {room_id}: {e}");
+    //     })?;
 
     let room = client
         .get_room(&room_id)
         .ok_or_else(|| eyre::eyre!("Failed to get room"))?;
 
+    // Get the current user ID
+    let user_id = client
+        .user_id()
+        .ok_or_else(|| eyre::eyre!("User not logged in"))?
+        .to_owned();
+
     let mut timeline: Vec<TimelineEvent> = Vec::new();
-    let mut token: Option<String> = None;
+    let limit = 250;
 
-    while timeline.len() < 250 {
-        let options = assign!(matrix_sdk::room::MessagesOptions::backward(), {limit: 150u16.into(), from: token});
-        let messages = room.messages(options).await?;
-        let events = messages.chunk;
-        token = messages.end;
+    // Fetch timeline events from the database
+    let rows: Vec<DbTimelineEvent> = sqlx::query_as(
+                    r#"SELECT
+                        event.rowid, timeline.rowid as timeline_rowid,
+                        event.room_id, event_id, sender, event_type, state_key,
+                        timestamp, content::jsonb,
+                        unsigned::jsonb, transaction_id, redacted_by, relates_to, relation_type,
+                        megolm_session_id, last_edit_rowid
+                    FROM timeline
+                    JOIN event ON event.rowid = timeline.event_rowid
+                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid < $3)
+                    ORDER BY timeline.rowid DESC
+                    LIMIT $4"#,
+                )
+                .bind(user_id.as_str())
+                .bind(room_id.as_str())
+                .bind(last_rowid.unwrap_or(0))
+                .bind(limit as i32)
+                .fetch_all(&db)
+                .await?;
 
-        timeline.extend(
-            stream::iter(events)
-                .then(|i| build_timeline_event(&client, &room_id, i))
-                .try_collect::<Vec<_>>()
-                .await?,
-        );
+    // let is_room_encrypted = room.encryption_state().is_encrypted();
 
-        if token.is_none() {
-            break;
+    let hit_end_of_timeline = rows.len() < limit;
+
+    // Convert database rows to TimelineEvent objects
+    for row in rows {
+        if let Ok(event) = build_timeline_event_from_db(row)
+            .await
+            .inspect_err(|e| warn!("Error building timeline: {e}"))
+        {
+            timeline.push(event);
         }
     }
-
-    timeline.reverse();
 
     let template = RoomTemplate {
         name: room
@@ -108,10 +157,12 @@ pub async fn room(
             .map(|name| name.to_string())
             .unwrap_or("Unknown Room".to_owned()),
         room_id: &room_id,
-        hit_end_of_timeline: token.is_none(),
+        hit_end_of_timeline,
         room: &room,
+        prev_page: Some(format!("/room/{room_id}/{limit}")),
         events: timeline,
     };
+
     Ok(Html(template.render().map_err(|e| eyre::eyre!(e))?).into_response())
 }
 

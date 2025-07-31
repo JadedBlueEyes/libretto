@@ -2,145 +2,21 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use color_eyre::eyre;
 use matrix_sdk::ruma::{
-    MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId, RoomId,
+    MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedMxcUri, OwnedUserId,
     events::{
-        AnyFullStateEventContent, AnySyncMessageLikeEvent, AnySyncTimelineEvent, StateEventType,
+        StateEventType,
         room::message::{MessageType, Relation, RoomMessageEventContentWithoutRelation},
     },
     html::RemoveReplyFallback,
 };
+use ruma::events::{AnyMessageLikeEventContent, AnyStateEventContent, EventContentFromType};
 use serde_json::value::RawValue;
-use tracing::warn;
-
-pub async fn build_timeline_event(
-    client: &matrix_sdk::Client,
-    room_id: &RoomId,
-    event: matrix_sdk::deserialized_responses::TimelineEvent,
-) -> eyre::Result<TimelineEvent> {
-    let event_de = event.raw().deserialize()?;
-    let sender = event_de.sender();
-    let timestamp = event_de.origin_server_ts();
-
-    let room = client.get_room(room_id);
-    let sender_profile = if let Some(ref room) = room {
-        let mut profile = room.get_member_no_sync(sender).await?;
-
-        // Fallback to the slow path.
-        if profile.is_none() {
-            profile = room.get_member(sender).await?;
-        }
-        profile.as_mut().map(|profile| Profile {
-            display_name: profile.display_name().map(ToOwned::to_owned),
-            display_name_ambiguous: profile.name_ambiguous(),
-            avatar_url: profile.avatar_url().map(ToOwned::to_owned),
-        })
-    } else {
-        None
-    };
-    let is_room_encrypted = room
-        .map(|r| r.encryption_state().is_encrypted())
-        .unwrap_or(false);
-
-    let content = build_timeline_item(&event_de).await?;
-
-    Ok(TimelineEvent {
-        sender: sender.into(),
-        sender_profile,
-        timestamp,
-        content,
-        is_room_encrypted,
-        event_id: event.event_id(),
-        raw: event.into_raw().into_json(),
-    })
-}
-
-pub async fn build_timeline_item(
-    event: &AnySyncTimelineEvent,
-) -> eyre::Result<TimelineItemContent> {
-    match event {
-        AnySyncTimelineEvent::MessageLike(any_sync_message_like_event) => {
-            messagelike_to_content(any_sync_message_like_event).await
-        }
-        AnySyncTimelineEvent::State(state_event) => {
-            Ok(TimelineItemContent::OtherState(Box::new(OtherState {
-                state_key: state_event.state_key().to_string(),
-                content: state_event.content(),
-            })))
-        }
-    }
-}
-async fn messagelike_to_content(
-    msg_like: &AnySyncMessageLikeEvent,
-) -> eyre::Result<TimelineItemContent> {
-    let content = match msg_like {
-        AnySyncMessageLikeEvent::RoomMessage(room_message_event) => match room_message_event {
-            ruma::events::SyncMessageLikeEvent::Original(original_sync_message_like_event) => {
-                let msgtype = original_sync_message_like_event.content.msgtype.clone();
-                let message = Message::from_event(
-                    msgtype,
-                    original_sync_message_like_event
-                        .unsigned
-                        .relations
-                        .replace
-                        .as_ref()
-                        .and_then(|r| match &r.content.relates_to {
-                            Some(Relation::Replacement(r)) => Some(r.new_content.clone()),
-                            _ => None,
-                        }),
-                );
-
-                TimelineItemContent::MsgLike(MsgLikeContent {
-                    kind: MsgLikeKind::Message(message),
-                    reactions: ReactionsByKeyBySender::default(),
-                    in_reply_to: None,
-                    thread_root: None,
-                })
-            }
-            ruma::events::SyncMessageLikeEvent::Redacted(_) => {
-                TimelineItemContent::MsgLike(MsgLikeContent {
-                    kind: MsgLikeKind::Redacted,
-                    reactions: ReactionsByKeyBySender::default(),
-                    in_reply_to: None,
-                    thread_root: None,
-                })
-            }
-        },
-        AnySyncMessageLikeEvent::Reaction(_) | AnySyncMessageLikeEvent::RoomRedaction(_) => {
-            let reactions = ReactionsByKeyBySender::default();
-            TimelineItemContent::MsgLike(MsgLikeContent {
-                kind: MsgLikeKind::Hidden,
-                reactions,
-                in_reply_to: None,
-                thread_root: None,
-            })
-        }
-        AnySyncMessageLikeEvent::RoomEncrypted(_) => {
-            let reactions = ReactionsByKeyBySender::default();
-            TimelineItemContent::MsgLike(MsgLikeContent {
-                kind: MsgLikeKind::UnableToDecrypt,
-                reactions,
-                in_reply_to: None,
-                thread_root: None,
-            })
-        }
-        _ => {
-            let reactions = ReactionsByKeyBySender::default();
-            warn!("Unsupported message like event type: {:?}", msg_like);
-            TimelineItemContent::MsgLike(MsgLikeContent {
-                kind: MsgLikeKind::UnsupportedType,
-                reactions,
-                in_reply_to: None,
-                thread_root: None,
-            })
-        }
-    };
-    Ok(content)
-}
+use tracing::{error, warn};
 
 #[derive(Clone, Debug)]
 pub struct TimelineEvent {
     /// The ID of the event.
-    pub event_id: Option<OwnedEventId>,
+    pub event_id: OwnedEventId,
     /// The sender of the event.
     pub sender: OwnedUserId,
     /// The sender's profile of the event.
@@ -149,13 +25,9 @@ pub struct TimelineEvent {
     pub timestamp: MilliSecondsSinceUnixEpoch,
     /// The content of the event.
     pub content: TimelineItemContent,
-    /// Whether or not the event belongs to an encrypted room.
-    ///
-    /// May be false when we don't know about the room encryption status yet.
-    pub is_room_encrypted: bool,
 
     /// The JSON serialization of the event.
-    pub raw: Box<RawValue>,
+    pub raw_content: Box<RawValue>,
 }
 
 impl TimelineEvent {
@@ -218,7 +90,7 @@ pub enum TimelineItemContent {
 #[derive(Clone, Debug)]
 pub struct OtherState {
     pub state_key: String,
-    pub content: AnyFullStateEventContent,
+    pub content: AnyStateEventContent,
 }
 
 /// A special kind of [`super::TimelineItemContent`] that groups together
@@ -313,4 +185,150 @@ pub struct ReactionsByKeyBySender(pub BTreeMap<String, BTreeMap<OwnedUserId, Rea
 #[derive(Clone, Debug)]
 pub struct ReactionInfo {
     pub timestamp: MilliSecondsSinceUnixEpoch,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct DbTimelineEvent {
+    pub rowid: i32,
+    pub timeline_rowid: i32,
+    pub room_id: String,
+    /// The ID of the event.
+    pub event_id: String,
+    /// The sender of the event.
+    pub sender: String,
+    /// The timestamp of the event.
+    pub timestamp: i64,
+
+    pub event_type: String,
+
+    pub state_key: Option<String>,
+
+    pub relation_type: Option<String>,
+    pub relates_to: Option<String>,
+
+    /// The JSON serialization of the content of the event.
+    #[sqlx(rename = "content")]
+    pub raw_content: sqlx::types::Json<Box<serde_json::value::RawValue>>,
+    #[sqlx(rename = "unsigned")]
+    pub raw_unsigned: sqlx::types::Json<Box<serde_json::value::RawValue>>,
+
+    pub redacted_by: Option<String>,
+    pub last_edit_rowid: Option<i32>,
+
+    pub megolm_session_id: Option<String>,
+
+    pub transaction_id: Option<String>,
+}
+
+/// Build a TimelineEvent from a database row
+pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<TimelineEvent> {
+    // Extract data from the row
+    let event_id: OwnedEventId = evt.event_id.try_into()?;
+    let sender: OwnedUserId = evt.sender.try_into()?;
+    let timestamp = MilliSecondsSinceUnixEpoch(evt.timestamp.try_into()?);
+    // (*evt.content).des
+
+    if let Some(state_key) = evt.state_key {
+        // let state_raw: Raw::<AnyStateEventContent> = Raw::from_json(evt.raw_content.0);
+
+        // In place of deserialize_with_type, use the EventContentFromType trait
+        let state_content =
+            AnyStateEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);
+
+        // dbg!(&state_content);
+        Ok(TimelineEvent {
+            event_id,
+            sender,
+            sender_profile: None, // We don't have profile info in the database
+            timestamp,
+            content: match state_content {
+                Ok(content) => {
+                    TimelineItemContent::OtherState(Box::new(OtherState { state_key, content }))
+                }
+                Err(error) => {
+                    error!("Failed to parse message content: {}", error);
+                    TimelineItemContent::FailedToParseState {
+                        event_type: StateEventType::from(evt.event_type),
+                        state_key,
+                        error: error.into(),
+                    }
+                }
+            },
+            raw_content: evt.raw_content.0,
+        })
+    } else {
+        // let message_raw: Raw::<AnyMessageLikeEventContent> = Raw::from_json(evt.raw_content.0);
+        //
+        let message_content =
+            AnyMessageLikeEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);
+        // dbg!(&message_content);
+
+        Ok(TimelineEvent {
+            event_id,
+            sender,
+            sender_profile: None, // We don't have profile info in the database
+            timestamp,
+            content: match message_content {
+                Ok(content) => messagelike_to_content(content).await?,
+                Err(error) => {
+                    error!("Failed to parse message content: {}", error);
+                    TimelineItemContent::FailedToParseMessageLike {
+                        error: error.into(),
+                    }
+                }
+            },
+            raw_content: evt.raw_content.0,
+        })
+    }
+}
+
+async fn messagelike_to_content(
+    msg_like: AnyMessageLikeEventContent,
+) -> eyre::Result<TimelineItemContent> {
+    let content = match msg_like {
+        AnyMessageLikeEventContent::RoomMessage(room_message_event_content) => {
+            let message = Message::from_event(
+                room_message_event_content.msgtype.clone(),
+                room_message_event_content
+                    .relates_to
+                    .as_ref()
+                    .and_then(|rel| match rel {
+                        Relation::Replacement(r) => Some(r.new_content.clone()),
+                        _ => None,
+                    }),
+            );
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::Message(message),
+                reactions: ReactionsByKeyBySender::default(),
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
+        AnyMessageLikeEventContent::RoomRedaction(_) | AnyMessageLikeEventContent::Reaction(_) => {
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::Hidden,
+                reactions: ReactionsByKeyBySender::default(),
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
+        AnyMessageLikeEventContent::RoomEncrypted(_) => {
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::UnableToDecrypt,
+                reactions: ReactionsByKeyBySender::default(),
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
+        _ => {
+            warn!("Unsupported message like event type: {:?}", msg_like);
+            TimelineItemContent::MsgLike(MsgLikeContent {
+                kind: MsgLikeKind::UnsupportedType,
+                reactions: ReactionsByKeyBySender::default(),
+                in_reply_to: None,
+                thread_root: None,
+            })
+        }
+    };
+    Ok(content)
 }
