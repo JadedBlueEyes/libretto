@@ -235,6 +235,8 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
         let state_content =
             AnyStateEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);
 
+        // TODO: handle redacted state events
+
         // dbg!(&state_content);
         Ok(TimelineEvent {
             event_id,
@@ -258,7 +260,21 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
         })
     } else {
         // let message_raw: Raw::<AnyMessageLikeEventContent> = Raw::from_json(evt.raw_content.0);
-        //
+        if evt.redacted_by.is_some() {
+            return Ok(TimelineEvent {
+                event_id,
+                sender,
+                sender_profile: None, // We don't have profile info in the database
+                timestamp,
+                content: TimelineItemContent::MsgLike(MsgLikeContent {
+                    kind: MsgLikeKind::Redacted,
+                    reactions: ReactionsByKeyBySender::default(),
+                    in_reply_to: None,
+                    thread_root: None,
+                }),
+                raw_content: evt.raw_content.0,
+            });
+        }
         let message_content =
             AnyMessageLikeEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);
         // dbg!(&message_content);
