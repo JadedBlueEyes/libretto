@@ -155,11 +155,20 @@ pub async fn room_internal(
         && last_rowid != 0
     {
         let row = sqlx::query(
-            r#"SELECT timeline.rowid as timeline_rowid
-                    FROM timeline
-                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND timeline.rowid >= $3
-                    ORDER BY timeline.rowid ASC
-                    OFFSET $4 LIMIT 1;"#,
+            r#"SELECT COALESCE(
+                    (
+                        SELECT timeline.rowid as timeline_rowid
+                        FROM timeline
+                        WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND timeline.rowid >= $3
+                        ORDER BY timeline.rowid ASC
+                        OFFSET $4 LIMIT 1
+                    ),
+                    (
+                        SELECT MAX(timeline.rowid) as timeline_rowid
+                        FROM timeline
+                        WHERE timeline.user_id = $1 AND timeline.room_id = $2
+                    )
+                ) as timeline_rowid;"#,
         )
         .bind(user_id.as_str())
         .bind(room_id.as_str())
@@ -169,11 +178,10 @@ pub async fn room_internal(
         .await
         .ok();
 
-        if let Some(row) = row {
-            next_page = Some(format!(
-                "/room/{room_id}/{}",
-                row.get::<i32, &str>("timeline_rowid")
-            ));
+        if let Some(timeline_rowid) = row.map(|r| r.get::<i32, &str>("timeline_rowid"))
+            && timeline_rowid != last_rowid
+        {
+            next_page = Some(format!("/room/{room_id}/{timeline_rowid}"));
         }
     }
 
