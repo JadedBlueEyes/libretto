@@ -1,17 +1,20 @@
 use color_eyre::eyre::{self};
 use matrix_sdk::Client;
 use matrix_sdk::encryption::Encryption;
+use matrix_sdk::{SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
 use rand::Rng;
 use rand::distr::Alphanumeric;
 use rpassword::prompt_password;
 use tracing::{error, info};
 
-use crate::config::AccountConfig;
+use crate::account::config::{AccountDetails, AuthMethod};
 use crate::session::{ClientSession, FullSession};
+use ruma::UserId;
 
 pub async fn login(
     data_dir: &std::path::Path,
-    config: &AccountConfig,
+    cache_dir: &std::path::Path,
+    config: &AccountDetails,
 ) -> eyre::Result<(Client, FullSession)> {
     info!("Logging in to new session…");
     let mut rng = rand::rng();
@@ -29,62 +32,97 @@ pub async fn login(
         .map(char::from)
         .collect();
 
+    // Get homeserver URL or name
+    let homeserver_url = if let Some(homeserver) = &config.homeserver {
+        homeserver.clone()
+    } else {
+        let uid = UserId::parse(&config.user_id)
+            .map_err(|e| eyre::eyre!("Invalid user ID format and no homeserver provided: {}", e))?;
+        // Extract homeserver from user ID
+        uid.server_name().to_string()
+    };
+
     let client = Client::builder()
-        .homeserver_url(
-            config
-                .server
-                .as_ref()
-                .expect("to have homeserver when logging in"),
+        .server_name_or_homeserver_url(&homeserver_url)
+        .sqlite_store_with_cache_path(
+            data_dir.join(&db_path),
+            cache_dir.join(&db_path),
+            Some(&passphrase),
         )
-        .sqlite_store(data_dir.join(&db_path), Some(&passphrase))
         .build()
         .await?;
 
     let client_session = ClientSession {
-        homeserver: config
-            .server
-            .as_ref()
-            .expect("to have homeserver when logging in")
-            .clone(),
+        homeserver: homeserver_url,
         db_path,
         passphrase,
     };
     let matrix_auth = client.matrix_auth();
 
-    loop {
-        let username = config
-            .username
-            .as_ref()
-            .expect("to have username when logging in");
-        let password = config.password.clone().unwrap_or_else(|| {
-            println!("Type password for the bot (characters won't show up as you type them)");
-            match prompt_password("Password: ") {
-                Ok(p) => p,
-                Err(err) => {
-                    panic!("FATAL: failed to get password: {err}");
+    match &config.auth_method {
+        AuthMethod::Password(password) => {
+            match matrix_auth
+                .login_username(&config.user_id, password)
+                .initial_device_display_name(config.device_name.as_deref().unwrap_or("libretto"))
+                .await
+            {
+                Ok(r) => {
+                    info!("Logged in as {} ({})", r.user_id, r.device_id);
+                }
+                Err(error) => {
+                    error!("Error logging in: {error}");
+                    return Err(error.into());
                 }
             }
-        });
+        }
+        AuthMethod::AccessToken(token) => {
+            let uid = UserId::parse(&config.user_id)
+                .map_err(|e| eyre::eyre!("Non-full MXID used with access token login {e}"))?;
+            client
+                .restore_session(MatrixSession {
+                    meta: SessionMeta {
+                        user_id: uid,
+                        device_id: "UNKNOWN".into(), // Will be updated after first sync
+                    },
+                    tokens: SessionTokens {
+                        access_token: token.clone(),
+                        refresh_token: None,
+                    },
+                })
+                .await?;
+            let device_id = client.device_id().expect("client id on logged in session");
+            info!("Restored session for {} ({})", &config.user_id, device_id);
+        }
+        AuthMethod::None => {
+            // Try to prompt for password
+            let username = &config.user_id;
+            println!("Type password for {username} (characters won't show up as you type them)");
+            let password = match prompt_password("Password: ") {
+                Ok(p) => p,
+                Err(err) => {
+                    return Err(eyre::eyre!("Failed to get password: {err}"));
+                }
+            };
 
-        match matrix_auth
-            .login_username(username, &password)
-            .initial_device_display_name(&config.device_name)
-            .await
-        {
-            Ok(_) => {
-                info!("Logged in as {username}");
-                break;
-            }
-            Err(error) => {
-                error!("Error logging in: {error}");
-                if config.password.is_some() {
+            match matrix_auth
+                .login_username(username, &password)
+                .initial_device_display_name(config.device_name.as_deref().unwrap_or("libretto"))
+                .await
+            {
+                Ok(r) => {
+                    info!("Logged in as {} ({})", r.user_id, r.device_id);
+                }
+                Err(error) => {
+                    error!("Error logging in: {error}");
                     return Err(error.into());
                 }
             }
         }
     }
 
-    verify_device(client.encryption(), config.recovery_key.clone()).await?;
+    if config.enable_encryption {
+        verify_device(client.encryption(), config.recovery_key.clone()).await?;
+    }
 
     // Persist the session to reuse it later.
     let user_session = matrix_auth

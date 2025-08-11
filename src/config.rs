@@ -1,51 +1,39 @@
+use crate::account::config::AccountDetails;
 use clap::Parser;
 use std::path::PathBuf;
 
+// mod account;
+
 /// Application configuration parsed from CLI arguments and environment variables.
 #[derive(Parser, Debug)]
-pub struct Config {
-    #[clap(flatten)]
-    pub account_config: Option<AccountConfig>,
+pub struct CommandConfig {
+    /// Path to the configuration file. This contains account settings and other configuration options.
+    #[arg(short, long, env = "CONFIG_FILE")]
+    pub config_file: PathBuf,
 
+    /// Connection string for the PostgreSQL database
     #[arg(long, env = "DATABASE_URL")]
     pub database_url: String,
+
+    /// Matrix SDK data directory
+    #[arg(long, env = "MATRIX_DATA_DIR")]
+    pub data_dir: Option<PathBuf>,
+    /// Matrix SDK cache directory
+    #[arg(long, env = "MATRIX_CACHE_DIR")]
+    pub cache_dir: Option<PathBuf>,
 
     #[clap(flatten)]
     pub(crate) verbose: clap_verbosity_flag::Verbosity,
 }
 
-/// Matrix account configuration.
-#[derive(Parser, Debug)]
-pub struct AccountConfig {
-    /// URL of the homeserver to connect to
-    #[arg(short, long, env = "MATRIX_SERVER")]
-    pub server: Option<String>,
+use serde::{Deserialize, Serialize};
 
-    /// Username of the bot
-    #[arg(short, long, env = "MATRIX_USERNAME")]
-    pub username: Option<String>,
-
-    /// Password of the bot
-    #[arg(short, long, env = "MATRIX_PASSWORD")]
-    pub password: Option<String>,
-
-    /// Delete devices other than the one being used by this instance
-    #[arg(long)]
-    pub delete_other_devices: bool,
-
-    /// Device name to set, if it doesn't exist
-    #[arg(long, default_value_t = String::from("libretto client"), env = "MATRIX_CLIENT_NAME")]
-    pub device_name: String,
-
-    /// Set the device name, even if it already exists
-    #[arg(long, default_value_t = false)]
-    pub set_device_name: bool,
-
-    /// Account recovery key
-    #[arg(short, long, env = "MATRIX_ACCOUNT_RECOVERY_KEY")]
-    pub recovery_key: Option<String>,
-
-    /// Account data directory
-    #[arg(short, long, env = "MATRIX_ACCOUNT_DATA_DIR")]
-    pub data_dir: Option<PathBuf>,
+/// Account details for Matrix bots
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ConfigFile {
+    /// Primary user ID to use. If unset, uses the first account.
+    /// If set, must match an account's user_id (raw string or parsed form).
+    pub primary_user_id: Option<String>,
+    /// List of accounts to be managed by the application
+    pub accounts: Vec<AccountDetails>,
 }

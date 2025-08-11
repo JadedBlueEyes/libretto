@@ -1,0 +1,50 @@
+# Example configuration file for Libretto
+# This file demonstrates how to configure multiple Matrix accounts
+
+# Primary user ID to use for the application
+# If unset, the first account in the list will be used
+# If set, it must match one of the accounts' user_id (either raw string or parsed form)
+primary_user_id = "@bot:example.com"
+
+# List of Matrix accounts to manage
+[[accounts]]
+# Full Matrix user ID - this is required and must be valid
+user_id = "@bot:example.com"
+
+# Authentication method - choose one of the following:
+# For password authentication:
+auth_method = { Password = "your_password_here" }
+
+# For access token authentication:
+# auth_method = { AccessToken = "your_access_token_here" }
+
+# For interactive password prompt (default):
+# auth_method = "None"
+
+# Enable end-to-end encryption (default: true)
+enable_encryption = true
+
+# Recovery key for E2EE sessions (optional but recommended if encryption is enabled)
+recovery_key = "your_recovery_key_here"
+
+# Homeserver URL (optional - if not set, extracted from user_id)
+homeserver = "https://example.com"
+
+# Device name for this instance (optional)
+device_name = "Libretto Bot"
+
+# Whether to set the device name even if it already exists (default: false)
+set_device_name = true
+
+# Example of a second account
+[[accounts]]
+user_id = "@another_bot:matrix.org"
+auth_method = { AccessToken = "mda_another_access_token" }
+enable_encryption = false
+device_name = "Libretto Secondary"
+
+# Example of a third account with minimal configuration
+[[accounts]]
+user_id = "@simple_bot:matrix.org"
+# Will use default auth_method = "None" (interactive password prompt)
+# Will use default enable_encryption = true

@@ -1,19 +1,25 @@
 use color_eyre::eyre;
 use matrix_sdk::Client;
-use matrix_sdk::ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
+
 use matrix_sdk::sync::SyncResponse;
 use ruma::UserId;
+use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use tracing::{info, trace, warn};
 
-use crate::config::Config;
+use crate::account::config::AccountDetails;
+use crate::config::CommandConfig;
 use crate::{DatabaseConnection, room_list};
 
 /// Handles device management for the Matrix client.
-pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
+pub async fn run(
+    client: &Client,
+    _config: &CommandConfig,
+    account_config: &AccountDetails,
+) -> eyre::Result<()> {
     let current_session = client.device_id().map(|d| d.to_owned());
-    if let Some(account_config) = &config.account_config
-        && account_config.delete_other_devices
-    {
+
+    // Delete other devices if requested
+    if account_config.delete_other_devices {
         info!(
             current_session = format!("{current_session:?}"),
             "Checking for other devices to delete"
@@ -26,40 +32,65 @@ pub async fn run(client: &Client, config: &Config) -> eyre::Result<()> {
             .filter(|device| Some(&device.device_id) != current_session.as_ref())
             .map(|device| device.device_id.clone())
             .collect();
+
         if !other_devices.is_empty() {
             trace!(
                 current_session = format!("{current_session:?}"),
                 other_devices = format!("{other_devices:?}"),
                 "Deleting other devices"
             );
-            client
-                .delete_devices(
-                    &other_devices,
+
+            // Try to delete devices with authentication
+            let auth_data = match &account_config.auth_method {
+                crate::account::config::AuthMethod::Password(password) => {
                     Some(AuthData::Password(Password::new(
-                        UserIdentifier::UserIdOrLocalpart(account_config.username.as_ref().expect("UIAA requires username/password").clone()),
-                        account_config.password.clone().unwrap_or_else(|| {
-                            println!(
-                                "Type password for the account (characters won't show up as you type them)"
-                            );
-                            rpassword::prompt_password("Password: ").unwrap_or_default()
-                        }),
-                    ))),
-                )
-                .await?;
+                        UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
+                        password.clone(),
+                    )))
+                }
+                _ => {
+                    // For other auth methods, prompt for password for UIAA
+                    println!(
+                        "Type password for the account (characters won't show up as you type them)"
+                    );
+                    match rpassword::prompt_password("Password: ") {
+                        Ok(password) if !password.is_empty() => {
+                            Some(AuthData::Password(Password::new(
+                                UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
+                                password,
+                            )))
+                        }
+                        _ => {
+                            warn!("No password provided, cannot delete other devices");
+                            None
+                        }
+                    }
+                }
+            };
+
+            if let Some(auth_data) = auth_data {
+                match client.delete_devices(&other_devices, Some(auth_data)).await {
+                    Ok(_) => {
+                        info!("Successfully deleted {} other devices", other_devices.len());
+                    }
+                    Err(e) => {
+                        warn!("Failed to delete other devices: {}", e);
+                    }
+                }
+            }
+        } else {
+            info!("No other devices found to delete");
         }
     }
 
-    if let Some(account_config) = &config.account_config
-        && account_config.set_device_name
-    {
+    if account_config.set_device_name {
         if let Some(current_session) = current_session {
+            let device_name = account_config.device_name.as_deref().unwrap_or("libretto");
             info!(
                 current_session = format!("{current_session:?}"),
-                "Renaming device to {}", &account_config.device_name
+                "Renaming device to {}", device_name
             );
-            client
-                .rename_device(&current_session, &account_config.device_name)
-                .await?;
+            client.rename_device(&current_session, device_name).await?;
         } else {
             warn!("No device ID found, cannot name device");
         }

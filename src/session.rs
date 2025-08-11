@@ -117,6 +117,7 @@ pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<Full
 pub async fn restore_session(
     session: FullSession,
     data_dir: &Path,
+    cache_dir: &Path,
 ) -> eyre::Result<(Client, Option<String>)> {
     let FullSession {
         client_session,
@@ -127,8 +128,9 @@ pub async fn restore_session(
     // Build the client with the previous settings from the session.
     let client = Client::builder()
         .homeserver_url(client_session.homeserver)
-        .sqlite_store(
+        .sqlite_store_with_cache_path(
             data_dir.join(&client_session.db_path),
+            cache_dir.join(&client_session.db_path),
             Some(&client_session.passphrase),
         )
         .build()

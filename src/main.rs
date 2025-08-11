@@ -2,21 +2,28 @@ mod room_list;
 mod room_to_html;
 mod timeline;
 
+pub mod account;
 mod assets;
 mod auth;
 mod client;
-mod config;
+pub mod config;
 mod error;
 mod server;
 mod session;
 
 use std::time::{Duration, Instant};
 
-use crate::{client::sync_handler, config::Config, session::load_session_from_db};
+use crate::{
+    client::sync_handler,
+    config::{CommandConfig, ConfigFile},
+    session::load_session_from_db,
+};
+use ::config::{Config, File};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use futures::TryFutureExt;
 use matrix_sdk::{config::SyncSettings, sync::SyncResponse};
+
 use sqlx::postgres::PgPoolOptions;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -30,7 +37,7 @@ type DatabaseConnection = <Database as sqlx::Database>::Connection;
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> eyre::Result<()> {
     // Parse CLI config
-    let config = Config::parse();
+    let config = CommandConfig::parse();
 
     // Logging
     let filter = tracing_subscriber::EnvFilter::builder()
@@ -55,25 +62,36 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("failed to run migrations")?;
 
-    let data_dir = config
-        .account_config
-        .as_ref()
-        .and_then(|ac| ac.data_dir.clone())
-        .unwrap_or_else(|| {
-            dirs::data_dir()
-                .expect("no data_dir directory found")
-                .join("libretto")
-        });
+    // Load config file
+    let config_file: ConfigFile = Config::builder()
+        .add_source(File::from(config.config_file.clone()))
+        .build()
+        .context("Failed to load config file")?
+        .try_deserialize()
+        .context("Failed to deserialize config file")?;
+
+    let data_dir = config.data_dir.clone().unwrap_or_else(|| {
+        dirs::data_dir()
+            .expect("no data_dir directory found")
+            .join("libretto")
+    });
+    let cache_dir = config.cache_dir.clone().unwrap_or_else(|| {
+        dirs::cache_dir()
+            .expect("no cache_dir directory found")
+            .join("libretto")
+    });
+
+    // Select the primary account based on primary_user_id or use first account
+    let primary_account = crate::account::selection::select_primary_account(
+        &config_file.accounts,
+        config_file.primary_user_id.as_deref(),
+    )?;
 
     let maybe_session = load_session_from_db(&db).await?;
     let (client, sync_token) = if let Some(session) = maybe_session {
-        crate::session::restore_session(session, &data_dir).await?
+        crate::session::restore_session(session, &data_dir, &cache_dir).await?
     } else {
-        let account_config = config
-            .account_config
-            .as_ref()
-            .expect("AccountConfig required for login");
-        let (client, session) = crate::auth::login(&data_dir, account_config).await?;
+        let (client, session) = crate::auth::login(&data_dir, &cache_dir, primary_account).await?;
 
         let _ = db
             .acquire()
@@ -89,7 +107,7 @@ async fn main() -> eyre::Result<()> {
 
     client.event_cache().subscribe()?;
 
-    crate::client::run(&client, &config).await?;
+    crate::client::run(&client, &config, primary_account).await?;
 
     let app = crate::server::build_router(client.clone(), db.clone());
 
