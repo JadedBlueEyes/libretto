@@ -399,8 +399,10 @@ async fn login_accounts(
                     "Login successful"
                 );
 
-                // Insert new session to database
-                save_session_to_db(db, &session).await?;
+                db.acquire()
+                    .map_err(|e| e.into())
+                    .and_then(async |mut tx| insert_account_session(&mut tx, &session).await)
+                    .await?;
 
                 client_sessions.push(crate::client::ClientSession {
                     client,
@@ -436,15 +438,6 @@ async fn setup_client(
     client.event_cache().subscribe()?;
     crate::client::run(client, account_config).await?;
     Ok(())
-}
-
-/// Save a session to the database
-#[instrument(level = "debug", skip(db, session), fields(user_id = %session.user_session.meta.user_id))]
-async fn save_session_to_db(db: &DatabasePool, session: &FullSession) -> eyre::Result<()> {
-    db.acquire()
-        .map_err(|e| e.into())
-        .and_then(async |mut tx| insert_account_session(&mut tx, session).await)
-        .await
 }
 
 #[cfg(test)]
