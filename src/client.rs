@@ -338,7 +338,6 @@ pub struct ClientSession {
 
 /// Result of processing sessions - contains clients ready for sync
 /// Run sync tasks for all clients
-#[instrument(level = "info", skip(client_sessions, db), fields(client_count = client_sessions.len()))]
 pub async fn run_sync_tasks(
     client_sessions: Vec<ClientSession>,
     db: &DatabasePool,
@@ -364,7 +363,6 @@ pub async fn run_sync_tasks(
 }
 
 /// Spawn a sync task for a given client session
-#[instrument(level = "debug", skip(client_session, db), fields(user_id = ?client_session.account_config.user_id))]
 fn spawn_sync_task(client_session: ClientSession, db: DatabasePool) -> tokio::task::JoinHandle<()> {
     let ClientSession {
         client,
@@ -420,7 +418,6 @@ async fn perform_initial_room_update(client: &Client, db: &DatabasePool) -> eyre
 }
 
 /// Run the sync loop for a client
-#[instrument(level = "debug", skip(client, db, sync_token), fields(user_id = ?client.user_id()))]
 async fn run_sync_loop(
     client: Client,
     db: DatabasePool,

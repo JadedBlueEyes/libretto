@@ -10,7 +10,7 @@ use matrix_sdk::{
     media::{MediaFormat, MediaThumbnailSettings},
 };
 use ruma::events::room::MediaSource;
-use tracing::{info, instrument, warn};
+use tracing::{info, warn};
 
 use crate::timeline::TimelineEvent;
 use crate::{DatabasePool, error::AppError};
@@ -274,7 +274,6 @@ pub async fn shutdown_signal() {
     }
 }
 
-#[instrument(level = "info", skip(primary_client, db))]
 pub async fn serve(primary_client: matrix_sdk::Client, db: DatabasePool) -> eyre::Result<()> {
     info!("Starting web server");
 
