@@ -38,14 +38,14 @@ tokio = { version = "1.45.1", features = ["rt", "signal"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.41"
 tracing-forest = { version = "0.2.0", features = [
-    "uuid",
+    # "uuid",
     "chrono",
     "smallvec",
     "tokio",
     "serde",
     "env-filter",
     "ansi",
-    "defer"
+#     "defer"
 ] }
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
