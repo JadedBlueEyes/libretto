@@ -1,27 +1,23 @@
 use color_eyre::eyre;
-use matrix_sdk::Client;
-
-use matrix_sdk::sync::SyncResponse;
+use futures::future::join_all;
+use matrix_sdk::{Client, config::SyncSettings, sync::SyncResponse};
 use ruma::UserId;
 use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
-use tracing::{info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::account::config::AccountDetails;
-use crate::config::CommandConfig;
-use crate::{DatabaseConnection, room_list};
+use crate::{DatabaseConnection, DatabasePool, room_list, server};
 
 /// Handles device management for the Matrix client.
-pub async fn run(
-    client: &Client,
-    _config: &CommandConfig,
-    account_config: &AccountDetails,
-) -> eyre::Result<()> {
+pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Result<()> {
     let current_session = client.device_id().map(|d| d.to_owned());
 
     // Delete other devices if requested
     if account_config.delete_other_devices {
-        info!(
-            current_session = format!("{current_session:?}"),
+        debug!(
+            user_id = %client.user_id().expect("Client should be logged in"),
             "Checking for other devices to delete"
         );
         let other_devices: Vec<_> = client
@@ -34,9 +30,9 @@ pub async fn run(
             .collect();
 
         if !other_devices.is_empty() {
-            trace!(
-                current_session = format!("{current_session:?}"),
-                other_devices = format!("{other_devices:?}"),
+            info!(
+                user_id = %client.user_id().expect("Client should be logged in"),
+                device_count = other_devices.len(),
                 "Deleting other devices"
             );
 
@@ -61,7 +57,10 @@ pub async fn run(
                             )))
                         }
                         _ => {
-                            warn!("No password provided, cannot delete other devices");
+                            warn!(
+                                user_id = %client.user_id().expect("Client should be logged in"),
+                                "No password provided, cannot delete other devices"
+                            );
                             None
                         }
                     }
@@ -71,28 +70,44 @@ pub async fn run(
             if let Some(auth_data) = auth_data {
                 match client.delete_devices(&other_devices, Some(auth_data)).await {
                     Ok(_) => {
-                        info!("Successfully deleted {} other devices", other_devices.len());
+                        info!(
+                            user_id = %client.user_id().expect("Client should be logged in"),
+                            device_count = other_devices.len(),
+                            "Successfully deleted other devices"
+                        );
                     }
                     Err(e) => {
-                        warn!("Failed to delete other devices: {}", e);
+                        warn!(
+                            user_id = %client.user_id().expect("Client should be logged in"),
+                            error = %e,
+                            "Failed to delete other devices"
+                        );
                     }
                 }
             }
         } else {
-            info!("No other devices found to delete");
+            debug!(
+                user_id = %client.user_id().expect("Client should be logged in"),
+                "No other devices found to delete"
+            );
         }
     }
 
     if account_config.set_device_name {
         if let Some(current_session) = current_session {
             let device_name = account_config.device_name.as_deref().unwrap_or("libretto");
-            info!(
-                current_session = format!("{current_session:?}"),
-                "Renaming device to {}", device_name
+            debug!(
+                user_id = %client.user_id().expect("Client should be logged in"),
+                device_id = %current_session,
+                device_name = %device_name,
+                "Setting device name"
             );
             client.rename_device(&current_session, device_name).await?;
         } else {
-            warn!("No device ID found, cannot name device");
+            warn!(
+                user_id = %client.user_id().expect("Client should be logged in"),
+                "No device ID found, cannot set device name"
+            );
         }
     }
 
@@ -140,7 +155,10 @@ pub async fn sync_handler(
 
     for (room_id, update) in timeline_updates {
         if update.limited {
-            warn!("Got limited timeline from update {room_id}");
+            warn!(
+                room_id = %room_id,
+                "Got limited timeline, clearing existing timeline data"
+            );
             sqlx::query!(
                 "DELETE FROM timeline WHERE room_id = $1",
                 room_id.to_string()
@@ -268,7 +286,10 @@ pub async fn sync_handler(
                     .await?;
                 }
                 Err(e) => {
-                    warn!("Failed to deserialize event: {:?}", e);
+                    warn!(
+                        error = %e,
+                        "Failed to deserialize timeline event"
+                    );
                 }
             }
         }
@@ -305,4 +326,207 @@ fn extract_mxc_uris_recursive(value: &serde_json::Value, mxc_uris: &mut Vec<Stri
         }
         _ => {}
     }
+}
+
+/// Represents a client with its associated account configuration and sync token
+#[derive(Debug)]
+pub struct ClientSession {
+    pub client: Client,
+    pub account_config: AccountDetails,
+    pub sync_token: Option<String>,
+}
+
+/// Result of processing sessions - contains clients ready for sync
+/// Run sync tasks for all clients
+#[instrument(level = "info", skip(client_sessions, db), fields(client_count = client_sessions.len()))]
+pub async fn run_sync_tasks(
+    client_sessions: Vec<ClientSession>,
+    db: &DatabasePool,
+) -> eyre::Result<()> {
+    if client_sessions.is_empty() {
+        warn!("No clients available for sync tasks");
+        return Ok(());
+    }
+
+    // Spawn sync tasks for all clients
+    let sync_tasks: Vec<_> = client_sessions
+        .into_iter()
+        .map(|client_session| spawn_sync_task(client_session, db.clone()))
+        .collect();
+
+    info!(sync_task_count = sync_tasks.len(), "Starting sync tasks");
+
+    // Wait for all sync tasks to complete
+    let _result = join_all(sync_tasks).await;
+    debug!("All sync tasks finished");
+
+    Ok(())
+}
+
+/// Spawn a sync task for a given client session
+#[instrument(level = "debug", skip(client_session, db), fields(user_id = ?client_session.account_config.user_id))]
+fn spawn_sync_task(client_session: ClientSession, db: DatabasePool) -> tokio::task::JoinHandle<()> {
+    let ClientSession {
+        client,
+        account_config: _,
+        sync_token,
+    } = client_session;
+
+    tokio::spawn(async move {
+        let user_id = client.user_id().expect("Client should be logged in");
+        let user_id_string = user_id.to_string();
+        info!(
+            user_id = %user_id_string,
+            "Starting sync task"
+        );
+
+        // Initial room update
+        if let Err(e) = perform_initial_room_update(&client, &db).await {
+            warn!(
+                user_id = %user_id_string,
+                error = %e,
+                "Failed initial room update"
+            );
+        }
+
+        // Run sync loop
+        if let Err(e) = run_sync_loop(client, db, sync_token).await {
+            error!(
+                user_id = %user_id_string,
+                error = %e,
+                "Sync loop failed"
+            );
+        }
+
+        debug!(
+            user_id = %user_id_string,
+            "Sync task finished"
+        );
+    })
+}
+
+/// Perform initial room update for a client
+#[instrument(level = "info", skip(client, db))]
+async fn perform_initial_room_update(client: &Client, db: &DatabasePool) -> eyre::Result<()> {
+    use futures::TryFutureExt;
+
+    let user_id = client.user_id().expect("Client should be logged in");
+    let rooms: Vec<_> = client.rooms().into_iter().collect();
+
+    db.acquire()
+        .map_err(|e| e.into())
+        .and_then(async |mut tx| crate::room_list::update_rooms(&rooms, user_id, &mut tx).await)
+        .await
+}
+
+/// Run the sync loop for a client
+#[instrument(level = "debug", skip(client, db, sync_token), fields(user_id = ?client.user_id()))]
+async fn run_sync_loop(
+    client: Client,
+    db: DatabasePool,
+    sync_token: Option<String>,
+) -> eyre::Result<()> {
+    let user_id = client.user_id().expect("Client should be logged in");
+    let mut last_sync_time: Option<Instant> = None;
+
+    // Setup sync settings
+    let filter = matrix_sdk::ruma::api::client::filter::FilterDefinition::with_lazy_loading();
+    let mut sync_settings = SyncSettings::default().filter(filter.into());
+    let mut backoff = None;
+
+    if let Some(token) = sync_token {
+        sync_settings = sync_settings.token(token);
+    }
+
+    let sync_loop = async {
+        loop {
+            let result = perform_sync_once(&client, &db, user_id, &sync_settings).await;
+
+            match result {
+                Ok(next_batch) => {
+                    sync_settings = sync_settings.token(next_batch);
+                    backoff = None;
+                }
+                Err(err) => {
+                    let backoff_seconds = 2u64.pow(backoff.unwrap_or(0));
+                    error!(
+                        user_id = %user_id,
+                        error = %err,
+                        "Sync error occurred"
+                    );
+                    warn!(
+                        user_id = %user_id,
+                        backoff_seconds = backoff_seconds,
+                        "Backing off before retry"
+                    );
+
+                    sleep(Duration::from_secs(backoff_seconds)).await;
+                    backoff = Some((backoff.unwrap_or(0) + 1).min(7));
+                    continue;
+                }
+            }
+
+            // Rate limiting
+            rate_limit_sync(&mut last_sync_time).await;
+        }
+    };
+
+    // Run sync loop with shutdown signal
+    tokio::select! {
+        _ = sync_loop => debug!(
+            user_id = %user_id,
+            "Sync loop finished"
+        ),
+        _ = server::shutdown_signal() => debug!(
+            user_id = %user_id,
+            "Sync shutdown requested"
+        ),
+    }
+
+    Ok(())
+}
+
+/// Perform a single sync operation
+#[instrument(level = "debug", skip(client, db, sync_settings), fields(user_id = %user_id))]
+async fn perform_sync_once(
+    client: &Client,
+    db: &DatabasePool,
+    user_id: &ruma::UserId,
+    sync_settings: &SyncSettings,
+) -> eyre::Result<String> {
+    use futures::TryFutureExt;
+
+    client
+        .sync_once(sync_settings.clone())
+        .map_err(|e| e.into())
+        .and_then(async |response: SyncResponse| {
+            let tx = db.begin().await?;
+            Ok((response, tx))
+        })
+        .and_then(async |(response, mut tx)| {
+            sync_handler(&mut tx, client, user_id, &response).await?;
+            crate::session::persist_sync_token(&mut tx, user_id, response.next_batch.clone())
+                .await?;
+            Ok((response, tx))
+        })
+        .and_then(async |(response, tx)| {
+            tx.commit().await?;
+            Ok(response.next_batch)
+        })
+        .await
+}
+
+/// Apply rate limiting to sync operations
+#[instrument(level = "trace", skip(last_sync_time))]
+async fn rate_limit_sync(last_sync_time: &mut Option<Instant>) -> () {
+    let now = Instant::now();
+
+    if let Some(last_time) = *last_sync_time {
+        let duration = now - last_time;
+        if duration <= Duration::from_secs(1) {
+            sleep(Duration::from_secs(1) - duration).await;
+        }
+    }
+
+    *last_sync_time = Some(now);
 }

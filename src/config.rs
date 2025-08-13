@@ -36,4 +36,7 @@ pub struct ConfigFile {
     pub primary_user_id: Option<String>,
     /// List of accounts to be managed by the application
     pub accounts: Vec<AccountDetails>,
+    /// Restore all sessions found in the database, even if not configured
+    #[serde(default)]
+    pub restore_all_sessions: bool,
 }

@@ -5,18 +5,23 @@ use matrix_sdk::{SessionMeta, SessionTokens, authentication::matrix::MatrixSessi
 use rand::Rng;
 use rand::distr::Alphanumeric;
 use rpassword::prompt_password;
-use tracing::{error, info};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::account::config::{AccountDetails, AuthMethod};
 use crate::session::{ClientSession, FullSession};
 use ruma::UserId;
 
+#[instrument(level = "info", skip(data_dir, cache_dir, config), fields(user_id = %config.user_id, homeserver = ?config.homeserver))]
 pub async fn login(
     data_dir: &std::path::Path,
     cache_dir: &std::path::Path,
     config: &AccountDetails,
 ) -> eyre::Result<(Client, FullSession)> {
-    info!("Logging in to new session…");
+    info!(
+        user_id = %config.user_id,
+        homeserver = %config.homeserver.as_ref().map_or_else(|| "<from user_id>", |s| s),
+        "Starting authentication"
+    );
     let mut rng = rand::rng();
 
     // Generate a random passphrase.
@@ -34,12 +39,21 @@ pub async fn login(
 
     // Get homeserver URL or name
     let homeserver_url = if let Some(homeserver) = &config.homeserver {
+        debug!(
+            homeserver = %homeserver,
+            "Using explicitly configured homeserver"
+        );
         homeserver.clone()
     } else {
         let uid = UserId::parse(&config.user_id)
             .map_err(|e| eyre::eyre!("Invalid user ID format and no homeserver provided: {}", e))?;
         // Extract homeserver from user ID
-        uid.server_name().to_string()
+        let server = uid.server_name().to_string();
+        debug!(
+            server = %server,
+            "Extracted homeserver from user_id"
+        );
+        server
     };
 
     let client = Client::builder()
@@ -50,8 +64,19 @@ pub async fn login(
             Some(&passphrase),
         )
         .build()
-        .await?;
+        .await
+        .map_err(|e| {
+            eyre::eyre!(
+                "Failed to build Matrix client for {}: {}",
+                config.user_id,
+                e
+            )
+        })?;
 
+    debug!(
+        user_id = %config.user_id,
+        "Matrix client built successfully"
+    );
     let client_session = ClientSession {
         homeserver: homeserver_url,
         db_path,
@@ -67,11 +92,23 @@ pub async fn login(
                 .await
             {
                 Ok(r) => {
-                    info!("Logged in as {} ({})", r.user_id, r.device_id);
+                    info!(
+                        user_id = %r.user_id,
+                        device_id = %r.device_id,
+                        "Password authentication successful"
+                    );
                 }
                 Err(error) => {
-                    error!("Error logging in: {error}");
-                    return Err(error.into());
+                    error!(
+                        user_id = %config.user_id,
+                        error = %error,
+                        "Password authentication failed"
+                    );
+                    return Err(eyre::eyre!(
+                        "Password login failed for {}: {}",
+                        config.user_id,
+                        error
+                    ));
                 }
             }
         }
@@ -89,9 +126,20 @@ pub async fn login(
                         refresh_token: None,
                     },
                 })
-                .await?;
+                .await
+                .map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to restore session with access token for {}: {}",
+                        config.user_id,
+                        e
+                    )
+                })?;
             let device_id = client.device_id().expect("client id on logged in session");
-            info!("Restored session for {} ({})", &config.user_id, device_id);
+            info!(
+                user_id = %config.user_id,
+                device_id = %device_id,
+                "Access token authentication successful"
+            );
         }
         AuthMethod::None => {
             // Try to prompt for password
@@ -110,11 +158,23 @@ pub async fn login(
                 .await
             {
                 Ok(r) => {
-                    info!("Logged in as {} ({})", r.user_id, r.device_id);
+                    info!(
+                        user_id = %r.user_id,
+                        device_id = %r.device_id,
+                        "Interactive password authentication successful"
+                    );
                 }
                 Err(error) => {
-                    error!("Error logging in: {error}");
-                    return Err(error.into());
+                    error!(
+                        user_id = %config.user_id,
+                        error = %error,
+                        "Interactive password authentication failed"
+                    );
+                    return Err(eyre::eyre!(
+                        "Interactive password login failed for {}: {}",
+                        config.user_id,
+                        error
+                    ));
                 }
             }
         }
@@ -128,6 +188,10 @@ pub async fn login(
     let user_session = matrix_auth
         .session()
         .expect("A logged-in client should have a session");
+    debug!(
+        user_id = %config.user_id,
+        "Authentication complete, session ready for persistence"
+    );
     let session = FullSession {
         client_session,
         user_session,
@@ -137,6 +201,7 @@ pub async fn login(
     Ok((client, session))
 }
 
+#[instrument(level = "debug", skip(encryption, recovery_key))]
 pub async fn verify_device(
     encryption: Encryption,
     recovery_key: Option<String>,
@@ -147,29 +212,32 @@ pub async fn verify_device(
         .expect("to have a device");
 
     if device.is_verified_with_cross_signing() {
-        info!(
-            "Device {} of user {} is verified",
-            device.device_id(),
-            device.user_id(),
+        debug!(
+            user_id = %device.user_id(),
+            device_id = %device.device_id(),
+            "Device is verified with cross-signing"
         );
     } else {
-        info!(
-            "Device {} of user {} is not verified",
-            device.device_id(),
-            device.user_id(),
+        warn!(
+            user_id = %device.user_id(),
+            device_id = %device.device_id(),
+            "Device is not verified with cross-signing"
         );
         let recovery_key = recovery_key.or_else(|| {
             println!("Type recovery key for the bot (characters won't show up as you type them)");
             prompt_password("Recovery Key: ").ok()
         });
         if let Some(recovery_key) = recovery_key {
-            info!("Trying to recover device");
+            debug!("Attempting device recovery with recovery key");
             let _ = encryption
                 .recovery()
                 .recover(&recovery_key)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to recover device: {e}");
+                    error!(
+                        error = %e,
+                        "Device recovery failed"
+                    );
                 });
         }
     }

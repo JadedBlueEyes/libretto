@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 askama = { version = "0.14.0", features = ["serde_json"] }
+
 axum = { version = "0.8.4", features = ["macros"] }
 base64 = "0.22.1"
 clap = { version = "4.5.36", features = ["derive", "env"] }
@@ -36,12 +37,23 @@ strum_macros = "0.27.1"
 tokio = { version = "1.45.1", features = ["rt", "signal"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.41"
+tracing-forest = { version = "0.2.0", features = [
+    "uuid",
+    "chrono",
+    "smallvec",
+    "tokio",
+    "serde",
+    "env-filter",
+    "ansi",
+    "defer"
+] }
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 vite-manifest = "0.1.0"
 
 [dev-dependencies]
 tempfile = "3.8.1"
+
 
 [features]
 

@@ -6,6 +6,7 @@ use ruma::events::room::tombstone::RoomTombstoneEventContent;
 use ruma::{OwnedRoomAliasId, OwnedUserId, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::instrument;
 
 use sqlx::types::Json as SqlxJson;
 
@@ -197,6 +198,7 @@ async fn get_room_db(
     .wrap_err("Failed to fetch Room")?
 }
 
+#[instrument(level = "debug", skip(rooms, tx), fields(user_id = %user_id, room_count = rooms.len()))]
 pub async fn update_rooms(
     rooms: &[matrix_sdk::Room],
     user_id: &UserId,
@@ -285,6 +287,7 @@ pub async fn update_rooms(
     Ok(())
 }
 
+#[instrument(level = "debug", skip(tx), fields(user_id = %user_id))]
 pub async fn room_ids_from_db(
     user_id: &UserId,
     tx: &mut DatabaseConnection,

@@ -248,7 +248,12 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
                     TimelineItemContent::OtherState(Box::new(OtherState { state_key, content }))
                 }
                 Err(error) => {
-                    error!("Failed to parse message content: {}", error);
+                    error!(
+                        event_type = %evt.event_type,
+                        state_key = %state_key,
+                        error = %error,
+                        "Failed to parse state event content"
+                    );
                     TimelineItemContent::FailedToParseState {
                         event_type: StateEventType::from(evt.event_type),
                         state_key,
@@ -287,7 +292,11 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
             content: match message_content {
                 Ok(content) => messagelike_to_content(content).await?,
                 Err(error) => {
-                    error!("Failed to parse message content: {}", error);
+                    error!(
+                        event_type = %evt.event_type,
+                        error = %error,
+                        "Failed to parse message-like event content"
+                    );
                     TimelineItemContent::FailedToParseMessageLike {
                         error: error.into(),
                     }

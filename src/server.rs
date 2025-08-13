@@ -10,7 +10,7 @@ use matrix_sdk::{
     media::{MediaFormat, MediaThumbnailSettings},
 };
 use ruma::events::room::MediaSource;
-use tracing_log::log::warn;
+use tracing::{info, instrument, warn};
 
 use crate::timeline::TimelineEvent;
 use crate::{DatabasePool, error::AppError};
@@ -187,10 +187,12 @@ pub async fn room_internal(
 
     // Convert database rows to TimelineEvent objects
     for row in rows {
-        if let Ok(event) = build_timeline_event_from_db(row)
-            .await
-            .inspect_err(|e| warn!("Error building timeline: {e}"))
-        {
+        if let Ok(event) = build_timeline_event_from_db(row).await.inspect_err(|e| {
+            warn!(
+                error = %e,
+                "Failed to build timeline event from database"
+            );
+        }) {
             timeline.push(event);
         }
     }
@@ -270,4 +272,44 @@ pub async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
+
+#[instrument(level = "info", skip(primary_client, db))]
+pub async fn serve(primary_client: matrix_sdk::Client, db: DatabasePool) -> eyre::Result<()> {
+    info!("Starting web server");
+
+    // Build the router with the primary client
+    let app = build_router(primary_client, db);
+
+    // Setup TCP listener with support for systemfd/listenfd
+    let listener = setup_tcp_listener().await?;
+
+    info!(
+        listener = ?listener,
+        "Web server listening"
+    );
+
+    // Run the web server with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    info!("Web server shut down gracefully");
+    Ok(())
+}
+
+/// Setup TCP listener with support for systemfd/listenfd
+async fn setup_tcp_listener() -> eyre::Result<tokio::net::TcpListener> {
+    use listenfd::ListenFd;
+
+    let mut listenfd = ListenFd::from_env();
+    let listener = match listenfd.take_tcp_listener(0)? {
+        Some(listener) => {
+            listener.set_nonblocking(true)?;
+            tokio::net::TcpListener::from_std(listener)?
+        }
+        None => tokio::net::TcpListener::bind("0.0.0.0:3000").await?,
+    };
+
+    Ok(listener)
 }

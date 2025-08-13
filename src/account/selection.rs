@@ -67,7 +67,7 @@ fn matches_account(
 }
 
 /// Construct a full Matrix user ID from user_id and homeserver
-fn construct_full_user_id(
+pub fn construct_full_user_id(
     user_id: &str,
     homeserver: Option<&ServerName>,
 ) -> eyre::Result<ruma::OwnedUserId> {
