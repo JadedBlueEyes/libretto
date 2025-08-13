@@ -235,7 +235,7 @@ pub async fn restore_session(
 
     // Build the client with the previous settings from the session.
     let client = Client::builder()
-        .homeserver_url(&client_session.homeserver)
+        .server_name_or_homeserver_url(&client_session.homeserver)
         .sqlite_store_with_cache_path(
             data_dir.join(&client_session.db_path),
             cache_dir.join(&client_session.db_path),
