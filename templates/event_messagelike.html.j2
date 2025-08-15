@@ -33,17 +33,165 @@
 <div class="event-content message-like">
     {% match message_like_event.kind %}
         {% when MsgLikeKind::Message(message_content) %}
-            {% if let Some(formatted_body) = self::message_formatted_body(&message_content.msgtype).and_then(self::html_body) %}
-                <div class="message-text formatted-body">
-                    {{ formatted_body | safe }}
-                    {% if message_content.edited %} (edited) {% endif %}
-                </div>
-            {% else %}
-                <div class="message-text plaintext-body">
-                    {{ message_content.msgtype.body() }}
-                    {% if message_content.edited %} (edited) {% endif %}
-                </div>
-            {% endif %}
+            {% match message_content.msgtype %}
+                {% when MessageType::Text(text_content) %}
+                    {% if let Some(formatted_body) = text_content.formatted.as_ref().and_then(self::html_body) %}
+                        <div class="message-text formatted-body">
+                            {{ formatted_body | safe }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="message-text plaintext-body">
+                            {{ text_content.body }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% endif %}
+                {% when MessageType::Notice(notice_content) %}
+                    {% if let Some(formatted_body) = notice_content.formatted.as_ref().and_then(self::html_body) %}
+                        <div class="message-notice formatted-body">
+                            {{ formatted_body | safe }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="message-notice plaintext-body">
+                            {{ notice_content.body }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% endif %}
+                {% when MessageType::Emote(emote_content) %}
+                    <div class="message-emote">
+                        * {{ emote_content.body }}
+                        {% if message_content.edited %} (edited) {% endif %}
+                    </div>
+                {% when MessageType::Image(image_content) %}
+                    <div class="message-image">
+                        {% match image_content.source %}
+                            {% when MediaSource::Plain(mxc_uri) %}
+                                <img src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}" alt="{{ image_content.body }}" loading="lazy">
+                            {% when _ %}
+                                <div class="media-error">Media source not supported</div>
+                        {% endmatch %}
+                        {% if let Some(formatted_body) = image_content.formatted_caption().and_then(self::html_body) %}
+                            <div class="caption formatted-body">
+                                {{ formatted_body | safe }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% else if let Some(text_content) = image_content.caption() %}
+                            <div class="caption plaintext-body">
+                                {{ text_content }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% when MessageType::Video(video_content) %}
+                    <div class="message-video">
+                        {% match video_content.source %}
+                            {% when MediaSource::Plain(mxc_uri) %}
+                                <video controls>
+                                    <source src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}">
+                                    Your browser does not support the video tag.
+                                </video>
+                            {% when _ %}
+                                <div class="media-error">Encrypted media source not supported</div>
+                        {% endmatch %}
+                        {% if let Some(formatted_body) = video_content.formatted_caption().and_then(self::html_body) %}
+                            <div class="caption formatted-body">
+                                {{ formatted_body | safe }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% else if let Some(text_content) = video_content.caption() %}
+                            <div class="caption plaintext-body">
+                                {{ text_content }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% when MessageType::Audio(audio_content) %}
+                    <div class="message-audio">
+                        {% match audio_content.source %}
+                            {% when MediaSource::Plain(mxc_uri) %}
+                                <audio controls>
+                                    <source src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}">
+                                    Your browser does not support the audio element.
+                                </audio>
+                            {% when _ %}
+                                <div class="media-error">Encrypted media source not supported</div>
+                        {% endmatch %}
+                        {% if let Some(formatted_body) = audio_content.formatted_caption().and_then(self::html_body) %}
+                            <div class="caption formatted-body">
+                                {{ formatted_body | safe }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% else if let Some(text_content) = audio_content.caption() %}
+                            <div class="caption plaintext-body">
+                                {{ text_content }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% when MessageType::File(file_content) %}
+                    <div class="message-file">
+                        {% match file_content.source %}
+                            {% when MediaSource::Plain(mxc_uri) %}
+                                <a href="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}" download="{{ file_content.filename() }}" class="file-download">
+                                    <div class="file-info">
+                                        <div class="file-name">{{ file_content.filename() }}</div>
+                                        {% if let Some(info) = file_content.info %}
+                                            {% if let Some(size) = info.size %}
+                                                <div class="file-size">({{ size }} bytes)</div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </a>
+                            {% when _ %}
+                                <div class="file-info">{{ file_content.body }} (Encrypted media source not supported)</div>
+                        {% endmatch %}
+                        {% if let Some(formatted_body) = file_content.formatted_caption().and_then(self::html_body) %}
+                            <div class="caption formatted-body">
+                                {{ formatted_body | safe }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% else if let Some(text_content) = file_content.caption() %}
+                            <div class="caption plaintext-body">
+                                {{ text_content }}
+                                {% if message_content.edited %} (edited) {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% when MessageType::Location(location_content) %}
+                    <div class="message-location">
+                        <div class="location-body">{{ location_content.body }}</div>
+                        <div class="location-link">
+                            <a href="{{ location_content.geo_uri }}" target="_blank">📍 View location</a>
+                        </div>
+                        {% if message_content.edited %} (edited) {% endif %}
+                    </div>
+                {% when MessageType::VerificationRequest(verification_content) %}
+                    <div class="verification-icon">🔐</div>
+                    {% if let Some(formatted_body) = verification_content.formatted.as_ref().and_then(self::html_body) %}
+                        <div class="message-verification formatted-body">
+                            {{ formatted_body | safe }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="message-verification plaintext-body">
+                            {{ verification_content.body }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% endif %}
+                {% when _ %}
+                    {% if let Some(formatted_body) = self::message_formatted_body(&message_content.msgtype).and_then(self::html_body) %}
+                        <div class="message-text formatted-body">
+                            {{ formatted_body | safe }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="message-text plaintext-body">
+                            {{ message_content.msgtype.body() }}
+                            {% if message_content.edited %} (edited) {% endif %}
+                        </div>
+                    {% endif %}
+            {% endmatch %}
         {% when MsgLikeKind::Redacted %}
             <div class="redaction-text plaintext-body">
                 Message was redacted.
