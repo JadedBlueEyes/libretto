@@ -192,6 +192,182 @@
                         </div>
                     {% endif %}
             {% endmatch %}
+        {% when MsgLikeKind::Sticker(sticker_content) %}
+            <div class="message-sticker">
+                {% match sticker_content.source %}
+                    {% when StickerMediaSource::Plain(mxc_uri) %}
+                        <img src="/media/plain/thumbnail:200x200/{{ mxc_uri.to_string() | urlencode_strict }}" alt="{{ sticker_content.body }}" title="{{ sticker_content.body }}" class="sticker-image" loading="lazy">
+                    {% when _ %}
+                        <div class="sticker-fallback>{{ sticker_content.body }}</div>
+                        <div class="media-error">Sticker source not supported</div>
+                {% endmatch %}
+            </div>
+        {% when MsgLikeKind::Reaction(emoji, event_id) %}
+            <div class="message-reaction">
+                <span class="reaction-text">reacted <span class="reaction-emoji">{{ emoji }}</span> to <a href="#event-{{ event_id }}">message</a></span>
+            </div>
+        {% when MsgLikeKind::CallInvite(call_id) %}
+            <div class="message-call call-invite">
+                <div class="call-icon">📞</div>
+                <div class="call-info">
+                    <div class="call-action">Started a call</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallAnswer(call_id) %}
+            <div class="message-call call-answer">
+                <div class="call-icon">✅</div>
+                <div class="call-info">
+                    <div class="call-action">Answered the call</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallHangup(call_id, reason) %}
+            <div class="message-call call-hangup">
+                <div class="call-icon">📴</div>
+                <div class="call-info">
+                    <div class="call-action">Ended the call</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                    <div class="call-reason">Reason: {{ reason }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallReject(call_id) %}
+            <div class="message-call call-reject">
+                <div class="call-icon">❌</div>
+                <div class="call-info">
+                    <div class="call-action">Rejected the call</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallNegotiate(call_id) %}
+            <div class="message-call call-negotiate">
+                <div class="call-icon">🔄</div>
+                <div class="call-info">
+                    <div class="call-action">Negotiating call</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallCandidates(call_id) %}
+            <div class="message-call call-candidates">
+                <div class="call-icon">🔗</div>
+                <div class="call-info">
+                    <div class="call-action">Exchanging call connection details</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallNotify(call_id) %}
+            <div class="message-call call-notify">
+                <div class="call-icon">🔔</div>
+                <div class="call-info">
+                    <div class="call-action">Call notification</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallSelectAnswer(call_id) %}
+            <div class="message-call call-select-answer">
+                <div class="call-icon">✅</div>
+                <div class="call-info">
+                    <div class="call-action">Selected call answer</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::CallMetadataChanged(call_id) %}
+            <div class="message-call call-metadata-changed">
+                <div class="call-icon">🔧</div>
+                <div class="call-info">
+                    <div class="call-action">Updated call metadata</div>
+                    <div class="call-details">Call ID: {{ call_id }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::PollStart(question, answers) %}
+            <div class="message-poll poll-start">
+                <div class="poll-icon">📊</div>
+                <div class="poll-header">Started a poll</div>
+                <div class="poll-question">{{ question }}</div>
+                <div class="poll-answers">
+                    {% for answer in answers %}
+                        <div class="poll-answer">
+                            <span class="poll-answer-text" id="poll-{{ event.event_id }}-{{ answer.0 }}">{{ answer.1 }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% when MsgLikeKind::PollResponse(answers, poll_event_id) %}
+            <div class="message-poll poll-response">
+                <div class="poll-icon">🗳️</div>
+                <div class="poll-info">
+                    <div class="poll-action">Voted in poll</div>
+                    <div class="poll-link">
+                        <a href="#event-{{ poll_event_id }}">View poll</a>
+                    </div>
+                    <div class="poll-selections">
+                        {% for answer in answers %}
+                            <a href="#poll-{{ poll_event_id }}-{{ answer }}" class="poll-selection">{{ answer }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% when MsgLikeKind::PollEnd(result) %}
+            <div class="message-poll poll-end">
+                <div class="poll-icon">📋</div>
+                <div class="poll-info">
+                    <div class="poll-action">Poll ended</div>
+                    <div class="poll-result">{{ result }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationReady(from_device) %}
+            <div class="message-verification verification-ready">
+                <div class="verification-icon">🔐</div>
+                <div class="verification-info">
+                    <div class="verification-action">Ready for key verification</div>
+                    <div class="verification-device">From device: {{ from_device }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationStart(from_device) %}
+            <div class="message-verification verification-start">
+                <div class="verification-icon">🔓</div>
+                <div class="verification-info">
+                    <div class="verification-action">Started key verification</div>
+                    <div class="verification-device">From device: {{ from_device }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationCancel(reason, code) %}
+            <div class="message-verification verification-cancel">
+                <div class="verification-icon">❌</div>
+                <div class="verification-info">
+                    <div class="verification-action">Cancelled key verification</div>
+                    <div class="verification-reason">{{ reason }}</div>
+                    <div class="verification-code">Code: {{ code }}</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationAccept %}
+            <div class="message-verification verification-accept">
+                <div class="verification-icon">✅</div>
+                <div class="verification-info">
+                    <div class="verification-action">Accepted key verification</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationKey %}
+            <div class="message-verification verification-key">
+                <div class="verification-icon">🔑</div>
+                <div class="verification-info">
+                    <div class="verification-action">Exchanged verification key</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationMac %}
+            <div class="message-verification verification-mac">
+                <div class="verification-icon">🔒</div>
+                <div class="verification-info">
+                    <div class="verification-action">Sent verification MAC</div>
+                </div>
+            </div>
+        {% when MsgLikeKind::KeyVerificationDone %}
+            <div class="message-verification verification-done">
+                <div class="verification-icon">🎉</div>
+                <div class="verification-info">
+                    <div class="verification-action">Key verification completed successfully</div>
+                </div>
+            </div>
         {% when MsgLikeKind::Redacted %}
             <div class="redaction-text plaintext-body">
                 Message was redacted.

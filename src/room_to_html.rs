@@ -7,6 +7,7 @@ use jiff::Timestamp;
 use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
 use matrix_sdk::ruma::events::room::MediaSource;
 use matrix_sdk::ruma::events::room::message::{FormattedBody, MessageType};
+use matrix_sdk::ruma::events::sticker::StickerMediaSource;
 
 use crate::timeline::{MsgLikeKind, TimelineEvent, TimelineItemContent};
 
