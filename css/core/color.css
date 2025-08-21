@@ -1,0 +1,68 @@
+:root {
+	color-scheme: light;
+
+	/* Base Colors */
+	--blue: #4e7ec2;
+	--light-blue: #15DED8;
+	--aqua-haze: #f3f3f3;
+	--gray-400: #ced4da;
+	--gray-500: #adb5bd;
+	--light-gray: #e0e0e0;
+	--green: #68B360;
+	--orange: #eb743b;
+	--purple: #ba478f;
+	--red: #c64040;
+	--yellow: #ffcd5c;
+	--light-black: #1a1a1a;
+	--dark-main: #213b52;
+	--dark-secondary: #243133;
+
+	/* Semantic Colors */
+	--primary: var(--purple);
+	--info: color-mix(in srgb, var(--purple) 80%, white 20%);
+	--headings-color: var(--orange);
+	--link-color: var(--purple);
+	--link-hover-color: var(--orange);
+
+	/* Text Colors */
+	--secondary-text-color: #888;
+
+	--box-color: white;
+	--color: black;
+	--main-bg: white;
+	--search-bg: white;
+	--card-bg: white;
+	--card-hover-bg: #f8f9fa;
+	--primary-color: var(--orange);
+	--secondary-color: var(--purple);
+	--title-color: var(--dark-main);
+	--gray-light: var(--light-gray);
+	--intro-bg-first: var(--purple);
+	--intro-bg-second: var(--orange);
+	--selected-bg: var(--dark-main);
+	--btn-dark: black;
+	--hint-color: var(--light-black);
+	--projects-bg: var(--aqua-haze);
+
+	@media (prefers-color-scheme: dark) {
+		color-scheme: dark;
+
+		--secondary-text-color: #aaa;
+		--box-color: var(--dark-secondary);
+		--main-bg: black;
+		--color: white;
+		--search-bg: var(--light-black);
+		--card-bg: #2f3337;
+		--card-hover-bg: #383c41;
+		--primary-color: var(--purple);
+		--secondary-color: var(--orange);
+		--title-color: var(--aqua-haze);
+		--gray-light: var(--dark-secondary);
+		--intro-bg-first: var(--dark-main);
+		--intro-bg-second: var(--light-black);
+		--selected-bg: var(--light-blue);
+		--btn-dark: var(--dark-secondary);
+		--hint-color: var(--aqua-haze);
+		--projects-bg: var(--dark-secondary);
+	}
+}

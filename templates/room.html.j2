@@ -6,29 +6,41 @@
     <title>Room - {{ name }}</title>
     <style>
         /*<![CDATA[*/
-            {{ String::from_utf8_lossy(crate::assets::Dist::get("room.css").unwrap().data) | safe}}
+            {{ String::from_utf8_lossy(crate::assets::Dist::get("room.css").expect("Failed to get style").data) | safe}}
         /*]]>*/
     </style>
 </head>
 <body>
     <main class="room">
-        <div class="room-header">
-            <h1>{{ name }}</h1>
-            <p>Room ID: {{ room_id | safe }}</p>
-            {% if let Some(prev_page) = prev_page %}
-            <p><a href={{prev_page}}>Prev page</a></p>
-            {% endif %}
-            {% if let Some(next_page) = next_page %}
-            <p><a href={{next_page}}>Next page</a></p>
-            {% endif %}
-        </div>
-        <div class="timeline">
-        <div class="timeline-list">
+        <header class="room-header">
+            <div class="room-header-content">
+                <h1 class="room-title">{{ name }}</h1>
+                <p class="room-id">Room ID: <code>{{ room_id | safe }}</code></p>
+
+                {% if prev_page.is_some() || next_page.is_some() %}
+                <nav class="room-navigation">
+                    {% if let Some(prev_page) = prev_page %}
+                    <a href="{{ prev_page }}" class="nav-button" rel="prev">
+                        <span aria-hidden="true">←</span> Previous page
+                    </a>
+                    {% endif %}
+                    {% if let Some(next_page) = next_page %}
+                    <a href="{{ next_page }}" class="nav-button" rel="next">
+                        Next page <span aria-hidden="true">→</span>
+                    </a>
+                    {% endif %}
+                </nav>
+                {% endif %}
+            </div>
+        </header>
+
+        <section class="timeline" aria-label="Message timeline">
+            <div class="timeline-list">
             {% for event in events %}
                 {% include "event.html.j2" %}
             {% endfor %}
             </div>
-        </div>
+        </section>
     </main>
 </body>
 </html>

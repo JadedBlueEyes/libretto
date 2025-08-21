@@ -1,7 +1,10 @@
-<div class="sender-avatar">
+<div class="sender-avatar" role="img" aria-label="Avatar for {{ event.sender.as_str() }}">
     {% if let Some(profile) = event.sender_profile %}
         {% if let Some(avatar_url) = profile.avatar_url %}
-            <img class="avatar" src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}" loading="lazy">
+            <img class="avatar transition-transform"
+                 src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}"
+                 alt="{{ event.sender.as_str() }}"
+                 loading="lazy">
         {% else %}
             <div class="avatar-fallback">
                 {% if let Some(display_name) = profile.display_name %}
@@ -44,9 +47,11 @@
                     </div>
             {% endmatch %}
         {% else %}
-             <details class="unsupported-event">
-                 <summary>Unsupported state event type for key {{ state_event.state_key() }}</summary>
-                 <pre>{{ format!("{:?}", state_event) }}</pre>
+             <details class="unsupported-event"">
+                 <summary class="unsupported-event-summary">
+                     <span aria-hidden="true">⚠️</span> Unsupported state event type for key {{ state_event.state_key() }}
+                 </summary>
+                 <pre class="unsupported-event-content">{{ format!("{:?}", state_event) }}</pre>
              </details>
     {% endmatch %}
     <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>

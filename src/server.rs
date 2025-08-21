@@ -143,7 +143,7 @@ pub async fn room_internal(
 
     // If we fetched more than limit, there is a next page
     if rows.len() > limit {
-        let next_row = rows.last().unwrap();
+        let next_row = rows.last().expect("Failed to get last row");
         prev_page = Some(format!("/room/{room_id}/{}", next_row.timeline_rowid));
         rows.truncate(limit);
     } else {

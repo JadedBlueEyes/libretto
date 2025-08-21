@@ -6,34 +6,46 @@
     <title>Libretto - Room List</title>
     <style>
         /*<![CDATA[*/
-            {{ String::from_utf8_lossy(crate::assets::Dist::get("room_list.css").unwrap().data) | safe}}
+            {{ String::from_utf8_lossy(crate::assets::Dist::get("room_list.css").expect("Failed to get style").data) | safe}}
         /*]]>*/
     </style>
     {{ crate::assets::DistVite::get_html_tags_for_asset::<crate::assets::Dist>("js/room_list.js") | safe }}
 </head>
 <body>
     <div class="room-list-container">
-        <div class="room-list-header">
-            <h1>Libretto</h1>
-            <p>Your Matrix rooms</p>
-        </div>
+        <header class="room-list-header">
+            <h1 class="room-list-title">Libretto</h1>
+            <p class="room-list-subtitle">Your Matrix rooms</p>
+        </header>
 
-        <div class="room-list-filters">
-            <button id="direct-rooms" class="filter-button">Direct Messages</button>
-            <button id="encrypted-rooms" class="filter-button">Encrypted Rooms</button>
-            <button id="unread-rooms" class="filter-button">Unread Rooms</button>
+        <section class="room-list-filters">
+            <button id="direct-rooms" class="filter-button" type="button" aria-pressed="false">
+                <span class="filter-icon" aria-hidden="true">👤</span>
+                Direct Messages
+            </button>
+            <button id="encrypted-rooms" class="filter-button" type="button" aria-pressed="false">
+                <span class="filter-icon" aria-hidden="true">🔒</span>
+                Encrypted Rooms
+            </button>
+            <button id="unread-rooms" class="filter-button" type="button" aria-pressed="false">
+                <span class="filter-icon" aria-hidden="true">📬</span>
+                Unread Rooms
+            </button>
             <div class="search-container">
-                <input type="text" id="room-search" placeholder="Filter rooms...">
+                <input type="text" id="room-search" class="room-search-input focus-ring"
+                       placeholder="Filter rooms..." autocomplete="off">
             </div>
-        </div>
+        </section>
 
-        <div class="room-grid">
+        <main class="room-grid" role="main" aria-live="polite" aria-label="Room list">
             {% for room in rooms %}
-            <a href="/room/{{ room.id | urlencode }}" class="room-card"
+            <a href="/room/{{ room.id | urlencode }}" class="room-card transition-card focus-ring"
                data-is-direct="{{ room.is_direct }}"
                data-is-encrypted="{{ room.is_encrypted }}"
-               data-has-unread="{{ room.has_unread() }}">
-                <div class="room-indicators">
+               data-has-unread="{{ room.has_unread() }}"
+               aria-label="{{ room.name.to_string() }}{% if room.has_unread() %} ({{ room.unread_count }} unread){% endif %}{% if room.is_direct %} - Direct message{% endif %}{% if room.is_encrypted %} - Encrypted{% endif %}">
+
+                <div class="room-indicators" aria-hidden="true">
                     {% if room.is_encrypted %}
                     <div class="room-indicator encrypted-indicator" title="Encrypted Room">
                         🔒
@@ -46,19 +58,26 @@
                     {% endif %}
                 </div>
 
-                <div class="room-card-header">
+                <header class="room-card-header">
                     <div class="room-avatar">
-
                         {% if let Some(avatar_url) = room.avatar_url %}
-                        <img src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ room.name.to_string() }}" loading="lazy">
+                        <img class="room-avatar-image"
+                             src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}"
+                             alt=""
+                             loading="lazy"
+                             width="64"
+                             height="64">
                         {% else %}
-                        {{ room.name_initial() }}
+                        <div class="room-avatar-fallback">
+                            {{ room.name_initial() }}
+                        </div>
                         {% endif %}
                     </div>
                     <h3 class="room-name">{{ room.name.to_string() }}</h3>
-                </div>
+                </header>
+
                 {% if room.has_unread() %}
-                <div class="room-unread-count">
+                <div class="room-unread-count" aria-label="{{ room.unread_count }} unread messages">
                     {{ room.unread_count }}
                 </div>
                 {% endif %}

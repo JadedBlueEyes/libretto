@@ -1,7 +1,10 @@
-<div class="sender-avatar">
+<div class="sender-avatar" role="img" aria-label="Avatar for {{ event.sender.as_str() }}">
     {% if let Some(profile) = event.sender_profile %}
         {% if let Some(avatar_url) = profile.avatar_url %}
-            <img class="avatar" src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}" loading="lazy">
+            <img class="avatar"
+                 src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}"
+                 alt="{{ event.sender.as_str() }}"
+                 loading="lazy">
         {% else %}
             <div class="avatar-fallback">
                 {% if let Some(display_name) = profile.display_name %}
@@ -38,66 +41,73 @@
                     {% if let Some(formatted_body) = text_content.formatted.as_ref().and_then(self::html_body) %}
                         <div class="message-text formatted-body">
                             {{ formatted_body | safe }}
-                            {% if message_content.edited %} (edited) {% endif %}
+                            {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                         </div>
                     {% else %}
                         <div class="message-text plaintext-body">
                             {{ text_content.body }}
-                            {% if message_content.edited %} (edited) {% endif %}
+                            {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                         </div>
                     {% endif %}
                 {% when MessageType::Notice(notice_content) %}
                     {% if let Some(formatted_body) = notice_content.formatted.as_ref().and_then(self::html_body) %}
                         <div class="message-notice formatted-body">
                             {{ formatted_body | safe }}
-                            {% if message_content.edited %} (edited) {% endif %}
+                            {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                         </div>
                     {% else %}
                         <div class="message-notice plaintext-body">
                             {{ notice_content.body }}
-                            {% if message_content.edited %} (edited) {% endif %}
+                            {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                         </div>
                     {% endif %}
                 {% when MessageType::Emote(emote_content) %}
                     <div class="message-emote">
-                        * {{ emote_content.body }}
-                        {% if message_content.edited %} (edited) {% endif %}
+                        <span aria-hidden="true">*</span> {{ emote_content.body }}
+                        {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                     </div>
                 {% when MessageType::Image(image_content) %}
-                    <div class="message-image">
+                    <figure class="message-image">
                         {% match image_content.source %}
                             {% when MediaSource::Plain(mxc_uri) %}
-                                <img src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}" alt="{{ image_content.body }}" loading="lazy">
+                                <img class="message-image-content"
+                                     src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}"
+                                     alt="{{ image_content.body }}"
+                                     loading="lazy">
                             {% when _ %}
-                                <div class="media-error">Media source not supported</div>
+                                <div class="media-error bg-error text-error" role="alert">
+                                    <span aria-hidden="true">⚠️</span> Media source not supported
+                                </div>
                         {% endmatch %}
                         {% if let Some(formatted_body) = image_content.formatted_caption().and_then(self::html_body) %}
-                            <div class="caption formatted-body">
+                            <figcaption class="caption formatted-body">
                                 {{ formatted_body | safe }}
-                                {% if message_content.edited %} (edited) {% endif %}
-                            </div>
+                                {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
+                            </figcaption>
                         {% else if let Some(text_content) = image_content.caption() %}
-                            <div class="caption plaintext-body">
+                            <figcaption class="caption plaintext-body">
                                 {{ text_content }}
-                                {% if message_content.edited %} (edited) {% endif %}
-                            </div>
+                                {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
+                            </figcaption>
                         {% endif %}
-                    </div>
+                    </figure>
                 {% when MessageType::Video(video_content) %}
-                    <div class="message-video">
+                    <figure class="message-video">
                         {% match video_content.source %}
                             {% when MediaSource::Plain(mxc_uri) %}
-                                <video controls>
+                                <video class="message-video-content" controls aria-label="{{ video_content.body }}">
                                     <source src="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}">
-                                    Your browser does not support the video tag.
+                                    <p>Your browser does not support the video tag. <a href="/media/plain/full/{{ mxc_uri.to_string() | urlencode_strict }}">Download video</a></p>
                                 </video>
                             {% when _ %}
-                                <div class="media-error">Encrypted media source not supported</div>
+                                <div class="media-error bg-error text-error" role="alert">
+                                    <span aria-hidden="true">⚠️</span> Encrypted media source not supported
+                                </div>
                         {% endmatch %}
                         {% if let Some(formatted_body) = video_content.formatted_caption().and_then(self::html_body) %}
-                            <div class="caption formatted-body">
+                            <figcaption class="caption formatted-body">
                                 {{ formatted_body | safe }}
-                                {% if message_content.edited %} (edited) {% endif %}
+                                {% if message_content.edited %} <span class="edit-indicator">(edited)</span>{% endif %}
                             </div>
                         {% else if let Some(text_content) = video_content.caption() %}
                             <div class="caption plaintext-body">
@@ -105,7 +115,7 @@
                                 {% if message_content.edited %} (edited) {% endif %}
                             </div>
                         {% endif %}
-                    </div>
+                    </figure>
                 {% when MessageType::Audio(audio_content) %}
                     <div class="message-audio">
                         {% match audio_content.source %}
@@ -281,20 +291,18 @@
             </div>
         {% when MsgLikeKind::PollStart(question, answers) %}
             <div class="message-poll poll-start">
-                <div class="poll-icon">📊</div>
                 <div class="poll-header">Started a poll</div>
                 <div class="poll-question">{{ question }}</div>
                 <div class="poll-answers">
                     {% for answer in answers %}
-                        <div class="poll-answer">
-                            <span class="poll-answer-text" id="poll-{{ event.event_id }}-{{ answer.0 }}">{{ answer.1 }}</span>
+                        <div class="poll-answer" id="poll-{{ event.event_id }}-{{ answer.0 }}">
+                            {{ answer.1 }}
                         </div>
                     {% endfor %}
                 </div>
             </div>
         {% when MsgLikeKind::PollResponse(answers, poll_event_id) %}
             <div class="message-poll poll-response">
-                <div class="poll-icon">🗳️</div>
                 <div class="poll-info">
                     <div class="poll-action">Voted in poll</div>
                     <div class="poll-link">
@@ -309,7 +317,6 @@
             </div>
         {% when MsgLikeKind::PollEnd(result) %}
             <div class="message-poll poll-end">
-                <div class="poll-icon">📋</div>
                 <div class="poll-info">
                     <div class="poll-action">Poll ended</div>
                     <div class="poll-result">{{ result }}</div>

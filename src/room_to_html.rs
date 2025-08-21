@@ -87,14 +87,19 @@ pub(crate) fn milliseconds_since_unix_epoch_to_format_string(milliseconds: i64) 
     let calendar = AnyCalendar::new(AnyCalendarKind::new(locale.clone().into()));
 
     let formatter: DateTimeFormatter<_> =
-        DateTimeFormatter::try_new(locale.into(), field_set_with_options).unwrap();
+        DateTimeFormatter::try_new(locale.into(), field_set_with_options)
+            .expect("Failed to create DateTimeFormatter");
     Timestamp::from_millisecond(milliseconds).map_or_else(
         |_| "Unknown Time".to_string(),
         |ts| {
             formatter
                 .format(
-                    &convert_from_datetime(ts.in_tz("UTC").unwrap().datetime())
-                        .to_calendar(&calendar),
+                    &convert_from_datetime(
+                        ts.in_tz("UTC")
+                            .expect("Failed to convert to UTC")
+                            .datetime(),
+                    )
+                    .to_calendar(&calendar),
                 )
                 .to_string()
         },
@@ -112,7 +117,7 @@ fn convert_from_date(v: jiff::civil::Date) -> IcuDate<Iso> {
     let month = v.month().unsigned_abs();
     let day = v.day().unsigned_abs();
     // All Jiff civil dates are valid ICU4X dates.
-    IcuDate::try_new_iso(year, month, day).unwrap()
+    IcuDate::try_new_iso(year, month, day).expect("Failed to create IcuDate")
 }
 fn convert_from_time(v: jiff::civil::Time) -> IcuTime {
     let hour = v.hour().unsigned_abs();
@@ -120,7 +125,7 @@ fn convert_from_time(v: jiff::civil::Time) -> IcuTime {
     let second = v.second().unsigned_abs();
     let subsec = v.subsec_nanosecond().unsigned_abs();
     // All Jiff civil times are valid ICU4X times.
-    IcuTime::try_new(hour, minute, second, subsec).unwrap()
+    IcuTime::try_new(hour, minute, second, subsec).expect("Failed to create IcuTime")
 }
 
 pub(crate) fn render_member_event(event: &OriginalStateEvent<RoomMemberEventContent>) -> String {

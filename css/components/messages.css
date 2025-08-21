@@ -1,0 +1,246 @@
+
+@import "messages/text.css";
+@import "messages/poll.css";
+
+.event-content.message-like {
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+}
+
+.message-notice {
+	/*
+	margin: var(--space-2) 0;
+	padding: var(--space-2) var(--space-4);
+	background-color: color-mix(in srgb, var(--secondary-color) 10%, transparent 90%);
+	border: 1px solid color-mix(in srgb, var(--secondary-color) 30%, transparent 70%);
+	border-left: 3px solid var(--secondary-color);
+	*/
+
+	font-size: var(--font-size-base);
+	line-height: var(--line-height-normal);
+	color: var(--secondary-text-color);
+}
+
+
+/* Emote (/me) */
+
+.message-emote {
+	font-size: var(--font-size-base);
+	line-height: var(--line-height-normal);
+	color: var(--secondary-color);
+	padding: var(--space-2);
+	border-radius: var(--space-1);
+}
+
+/* image, video */
+
+.message-image {
+	max-width: 100%;
+	margin: var(--space-2) 0;
+}
+
+.message-image-content {
+	max-width: 100%;
+	max-height: 80vh;
+	height: auto;
+	border-radius: var(--space-1);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+.message-image .caption, .message-video .caption {
+	margin-top: var(--space-2);
+}
+
+
+.message-video {
+	max-width: 100%;
+	margin: var(--space-2) 0;
+}
+
+.message-video-content {
+	max-width: 100%;
+	max-height: 60vh;
+	border-radius: var(--space-1);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+@media (max-width: 768px) {
+	.message-image-content,
+	.message-video-content {
+		max-height: 50vh;
+	}
+}
+
+/* audio */
+
+.message-audio {
+	margin: var(--space-2) 0;
+	padding: var(--space-3);
+	background-color: var(--card-bg);
+	border: 1px solid var(--gray-light);
+	border-radius: var(--space-2);
+}
+
+
+.message-audio .caption {
+	margin-top: var(--space-2);
+}
+
+.message-file {
+	margin: var(--space-2) 0;
+	padding: var(--space-3);
+	background-color: var(--card-bg);
+	border: 1px solid var(--gray-light);
+	border-radius: var(--space-2);
+}
+
+
+.file-info {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.file-info::before {
+	content: "📎";
+	font-size: var(--font-size-lg);
+	flex-shrink: 0;
+}
+
+.file-name {
+	font-weight: var(--font-weight-medium);
+	color: var(--title-color);
+}
+
+.file-size {
+	font-size: var(--font-size-sm);
+	color: var(--secondary-text-color);
+}
+
+.file-download {
+	display: block;
+	text-decoration: none;
+	color: var(--color);
+}
+
+.message-file .caption {
+	margin-top: var(--space-2);
+	font-size: var(--font-size-sm);
+	color: var(--secondary-text-color);
+	font-style: italic;
+}
+
+@media (max-width: 480px) {
+	.file-info {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-1);
+	}
+}
+
+/* location */
+
+.message-location {
+	margin: var(--space-2) 0;
+	padding: var(--space-3);
+	background-color: var(--card-bg);
+	border: 1px solid var(--gray-light);
+	border-radius: var(--space-2);
+}
+
+.location-body {
+	font-weight: var(--font-weight-medium);
+	margin-bottom: var(--space-2);
+	color: var(--title-color);
+}
+
+.location-link a {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	color: var(--link-color);
+	text-decoration: none;
+	font-size: var(--font-size-sm);
+}
+
+.location-link a:hover {
+	color: var(--link-hover-color);
+	text-decoration: underline;
+}
+
+/* sticker */
+.message-sticker {
+	margin: var(--space-2) 0;
+	text-align: center;
+}
+
+.sticker-image {
+	max-width: 200px;
+	max-height: 200px;
+	height: auto;
+	border-radius: var(--space-1);
+}
+
+.sticker-fallback {
+	display: inline-block;
+	padding: var(--space-2);
+	background-color: var(--card-bg);
+	border: 1px solid var(--gray-light);
+	border-radius: var(--space-1);
+	font-size: var(--font-size-sm);
+	color: var(--secondary-text-color);
+}
+
+.message-reaction {
+	margin: var(--space-2) 0;
+	padding: var(--space-2) var(--space-4);
+	background-color: color-mix(in srgb, var(--primary-color) 10%, transparent 90%);
+	border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent 70%);
+	font-size: var(--font-size-sm);
+	color: var(--color);
+}
+
+.reaction-text a {
+	color: var(--link-color);
+	text-decoration: none;
+}
+
+.reaction-text a:hover {
+	color: var(--link-hover-color);
+	text-decoration: underline;
+}
+
+.edit-indicator {
+	font-size: var(--font-size-xs);
+	color: var(--secondary-text-color);
+	font-style: italic;
+	margin-left: var(--space-1);
+}
+
+.redaction-text {
+	font-style: italic;
+
+	margin: var(--space-2) 0;
+	padding: var(--space-2) var(--space-4);
+	background-color: color-mix(in srgb, var(--primary-color) 10%, transparent 90%);
+	border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent 70%);
+	font-size: var(--font-size-sm);
+	color: var(--color);
+}
+
+.hidden-message {
+	display: none;
+}
+
+.unsupported-type {
+	font-style: italic;
+
+	margin: var(--space-2) 0;
+	padding: var(--space-2) var(--space-4);
+	background-color: color-mix(in srgb, var(--primary-color) 10%, transparent 90%);
+	border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent 70%);
+	font-size: var(--font-size-sm);
+	color: var(--color);
+}

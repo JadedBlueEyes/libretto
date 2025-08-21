@@ -1,4 +1,9 @@
-<div class="timeline-event" data-raw-event-content="{{ event.raw_content }}" data-event-id="{{ event.event_id }}" id="event-{{ event.event_id }}" data-hidden-event={{ event.is_hidden_event() }}>
+<div class="timeline-event"
+         data-raw-event-content="{{ event.raw_content }}"
+         data-event-id="{{ event.event_id }}"
+         id="event-{{ event.event_id }}"
+         data-hidden-event="{{ event.is_hidden_event() }}"
+         aria-label="Message from {{ event.sender.as_str() }}">
     {% match event.content %}
         {% when TimelineItemContent::MsgLike(msg_like_content) %}
             {% set message_like_event = msg_like_content %}

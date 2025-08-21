@@ -1,0 +1,77 @@
+div.timeline-list {
+	max-width: var(--container-4xl);
+	margin-inline: auto;
+}
+
+div.timeline-event {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding-inline: var(--timeline-horizontal-padding);
+	padding-block: var(--timeline-vertical-padding);
+
+	display: grid;
+	grid-template-columns: var(--avatar-size) var(--avatar-gap) 1fr 1fr;
+	grid-template-rows: auto;
+	gap: 0px 0px;
+	grid-template-areas:
+		"avatar avatar-gap sender sender"
+		"avatar avatar-gap content content"
+		"avatar avatar-gap content content";
+
+	&:target {
+		background-color: oklab(from yellow .6 a b / 0.4);
+	}
+
+	.sender-profile {
+		grid-area: sender;
+		display: flex;
+		flex-direction: row;
+		.sender-name {
+			font-weight: var(--font-weight-bold);
+		}
+		.profile-timestamp {
+			font-size: var(--font-size-sm);
+			opacity: 0.8;
+			align-content: end;
+			margin-inline-start: 1ex;
+		}
+	}
+	.timestamp {
+		grid-area: sender;
+	}
+	.event-content.message-like {
+		grid-area: content;
+	}
+	.event-content.state-event {
+		grid-area: content;
+		color: var(--color);
+		font-size: var(--font-size-sm);
+	}
+	.small-event {
+		grid-area: content;
+		color: red;
+		font-size: var(--font-size-sm);
+	}
+	.timestamp-trailing {
+		display: none;
+	}
+}
+
+div.timeline-event[data-hidden-event=true] {
+    display: none;
+}
+
+
+div.sender-avatar {
+    grid-area: avatar;
+}
+
+img.avatar {
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    width: 100%;
+}
