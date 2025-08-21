@@ -3,10 +3,9 @@
         {% when TimelineItemContent::MsgLike(msg_like_content) %}
             {% set message_like_event = msg_like_content %}
             {% include "event_messagelike.html.j2" %}
-        {% when TimelineItemContent::OtherState(other_state_content) %}
+        {% when TimelineItemContent::StateEvent(other_state_content) %}
             {% set state_event = other_state_content %}
-            <pre>state_event = {{ format!("{state_event:?}") }}</pre>
-            {# {% include "event_state.html.j2" %} #}
+            {% include "event_state.html.j2" %}
         {% when TimelineItemContent::FailedToParseMessageLike { error } %}
             <div class="small-event bad-event">Bad event (FailedToParseMessageLike): {{error}}</div>
         {% when TimelineItemContent::FailedToParseState { event_type, state_key, error } %}
@@ -19,7 +18,7 @@
             {% set message_like_event = msg_like_content %}
             {% include "event_messagelike.html.j2" %}
         </div>
-    {% when TimelineItemContent::OtherState(other_state_content) %}
+    {% when TimelineItemContent::StateEvent(other_state_content) %}
         <div class="timeline-event" data-raw-event="{{ event.raw | json }}" data-event-id="{{ event.event_id }}" id="event-{{ event.event_id }}" data-sender="{{ event.sender.as_str() }}">
             {% set state_event = other_state_content %}
             {% include "event_state.html.j2" %}

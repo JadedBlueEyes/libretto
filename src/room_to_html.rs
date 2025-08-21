@@ -8,6 +8,9 @@ use matrix_sdk::ruma::MilliSecondsSinceUnixEpoch;
 use matrix_sdk::ruma::events::room::MediaSource;
 use matrix_sdk::ruma::events::room::message::{FormattedBody, MessageType};
 use matrix_sdk::ruma::events::sticker::StickerMediaSource;
+use ruma::events::OriginalStateEvent;
+use ruma::events::room::member::{MembershipChange, RoomMemberEventContent};
+use ruma::events::{AnyStateEvent, StateEvent};
 
 use crate::timeline::{MsgLikeKind, TimelineEvent, TimelineItemContent};
 
@@ -28,6 +31,7 @@ pub struct RoomTemplate<'a> {
     pub next_page: Option<String>,
     pub room: &'a matrix_sdk::room::Room,
 }
+
 fn html_body(formatted_body: &FormattedBody) -> Option<&str> {
     if formatted_body.format == ruma::events::room::message::MessageFormat::Html {
         Some(&formatted_body.body)
@@ -117,4 +121,85 @@ fn convert_from_time(v: jiff::civil::Time) -> IcuTime {
     let subsec = v.subsec_nanosecond().unsigned_abs();
     // All Jiff civil times are valid ICU4X times.
     IcuTime::try_new(hour, minute, second, subsec).unwrap()
+}
+
+pub(crate) fn render_member_event(event: &OriginalStateEvent<RoomMemberEventContent>) -> String {
+    membership_change_description(
+        &event.membership_change(),
+        event.state_key.as_str(),
+        event.sender.as_str(),
+    )
+}
+pub(crate) fn membership_change_description(
+    new_membership: &MembershipChange,
+    state_key: &str,
+    sender: &str,
+) -> String {
+    let target_user = state_key;
+    let acting_user = sender;
+
+    // Check if user is acting on themselves
+    let is_self_action = target_user == acting_user;
+    match new_membership {
+        MembershipChange::None => format!("{acting_user} made no change"),
+        MembershipChange::Error => "An error occurred during membership change".to_string(),
+        MembershipChange::Joined => {
+            if is_self_action {
+                format!("{target_user} joined the room")
+            } else {
+                format!("{acting_user} added {target_user} to the room")
+            }
+        }
+        MembershipChange::Left => {
+            if is_self_action {
+                format!("{target_user} left the room")
+            } else {
+                format!("{acting_user} removed {target_user} from the room")
+            }
+        }
+        MembershipChange::Banned => {
+            format!("{acting_user} banned {target_user}")
+        }
+        MembershipChange::Unbanned => {
+            format!("{acting_user} unbanned {target_user}")
+        }
+        MembershipChange::Kicked => {
+            format!("{acting_user} kicked {target_user}")
+        }
+        MembershipChange::Invited => {
+            format!("{acting_user} invited {target_user}")
+        }
+        MembershipChange::KickedAndBanned => {
+            format!("{acting_user} kicked and banned {target_user}")
+        }
+        MembershipChange::InvitationAccepted => {
+            format!("{target_user} accepted the invitation and joined the room")
+        }
+        MembershipChange::InvitationRejected => {
+            format!("{target_user} declined the invitation")
+        }
+        MembershipChange::InvitationRevoked => {
+            format!("{acting_user} revoked the invitation for {target_user}")
+        }
+        MembershipChange::Knocked => {
+            format!("{target_user} requested to join the room")
+        }
+        MembershipChange::KnockAccepted => {
+            format!("{acting_user} accepted {target_user}'s request to join")
+        }
+        MembershipChange::KnockRetracted => {
+            format!("{target_user} withdrew their request to join")
+        }
+        MembershipChange::KnockDenied => {
+            format!("{acting_user} denied {target_user}'s request to join")
+        }
+        MembershipChange::ProfileChanged {
+            displayname_change: _,
+            avatar_url_change: _,
+        } => {
+            format!("{target_user} updated their profile")
+        }
+        MembershipChange::NotImplemented => "Membership change not implemented".to_string(),
+        _ => "Unknown membership change".to_string(),
+    }
 }

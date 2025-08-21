@@ -1,8 +1,27 @@
+<div class="sender-avatar">
+    {% if let Some(profile) = event.sender_profile %}
+        {% if let Some(avatar_url) = profile.avatar_url %}
+            <img class="avatar" src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}" alt="{{ event.sender.as_str() }}" loading="lazy">
+        {% else %}
+            <div class="avatar-fallback">
+                {% if let Some(display_name) = profile.display_name %}
+                    {{ display_name }}
+                {% else %}
+                    {{ event.sender.as_str() }}
+                {% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="avatar-fallback">
+            {{ event.sender.as_str() }}
+        </div>
+    {% endif %}
+</div>
 <div class="sender-profile">
-    {% if let Some(profile) = members.get(event.sender) %}
+    {% if let Some(profile) = event.sender_profile %}
         <div class="sender-name">
-            {% if let Some(display_name) = profile.display_name() %} {{ display_name }}
-            {% else %} {{ profile.user_id().as_str() }} {% endif %}
+            {% if let Some(display_name) = profile.display_name %} {{ display_name }}
+            {% else %} {{ event.sender.as_str() }} {% endif %}
         </div>
     {% else %}
         <div class="sender-name no-profile">
@@ -12,21 +31,23 @@
     <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
 </div>
 <div class="event-content state-event">
-    {% match state_event.content %}
-        {% when AnyStateEventContent::RoomMember(sync_room_member_event) %}
-            <div class="membership-text plaintext-body">
-                Changed the membership of {{ state_event.state_key }} to {{ sync_room_member_event.membership.as_str() }}.
-            </div>
-        {% when AnyStateEventContent::RoomName(room_name_event) %}
-            <div class="state-event-text plaintext-body">
-                Room name changed to: {{ room_name_event.name().unwrap_or("[no name]") }}
-            </div>
-        {% when AnyStateEventContent::RoomTopic(room_topic_event) %}
-            <div class="state-event-text plaintext-body">
-                Room topic changed to: {{ room_topic_event.topic }}
-            </div>
+    {% match **state_event %}
+        {% when AnyStateEvent::RoomMember(sync_room_member_event) %}
+            {% match sync_room_member_event %}
+                {% when StateEvent::Original(sync_room_member_event) %}
+                    <div class="membership-text plaintext-body">
+                        {{ self::render_member_event(&sync_room_member_event) }}
+                    </div>
+                {% when StateEvent::Redacted(sync_room_member_event) %}
+                    <div class="membership-text plaintext-body">
+                        {{ format!("{:?}", sync_room_member_event) }}
+                    </div>
+            {% endmatch %}
         {% else %}
-             <div class="unsupported-event">Unsupported state event type for key {{ state_event.state_key }}. Content: {{ state_event.content._to_string() }}</div>
+             <details class="unsupported-event">
+                 <summary>Unsupported state event type for key {{ state_event.state_key() }}</summary>
+                 <pre>{{ format!("{:?}", state_event) }}</pre>
+             </details>
     {% endmatch %}
     <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
 </div>

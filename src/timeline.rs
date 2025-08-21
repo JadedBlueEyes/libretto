@@ -10,8 +10,9 @@ use matrix_sdk::ruma::{
     },
     html::RemoveReplyFallback,
 };
-use ruma::events::{AnyMessageLikeEventContent, AnyStateEventContent, EventContentFromType};
-use serde_json::value::RawValue;
+use ruma::events::{AnyMessageLikeEventContent, AnyStateEvent, EventContentFromType};
+use serde::Deserialize;
+use serde_json::{json, value::RawValue};
 use tracing::{error, warn};
 
 #[derive(Clone, Debug)]
@@ -59,14 +60,8 @@ pub struct Profile {
 pub enum TimelineItemContent {
     MsgLike(Box<MsgLikeContent>),
 
-    /// A room membership change.
-    // MembershipChange(RoomMembershipChange),
-
-    /// A room member profile change.
-    // ProfileChange(MemberProfileChange),
-
-    /// Another state event.
-    OtherState(Box<OtherState>),
+    /// A state event.
+    StateEvent(Box<AnyStateEvent>),
 
     /// A message-like event that failed to deserialize.
     FailedToParseMessageLike {
@@ -85,13 +80,6 @@ pub enum TimelineItemContent {
         /// The deserialization error.
         error: Arc<serde_json::Error>,
     },
-}
-
-/// A state event that doesn't have its own variant.
-#[derive(Clone, Debug)]
-pub struct OtherState {
-    pub state_key: String,
-    pub content: AnyStateEventContent,
 }
 
 /// A special kind of [`super::TimelineItemContent`] that groups together
@@ -262,11 +250,33 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
     // (*evt.content).des
 
     if let Some(state_key) = evt.state_key {
-        // let state_raw: Raw::<AnyStateEventContent> = Raw::from_json(evt.raw_content.0);
-
-        // In place of deserialize_with_type, use the EventContentFromType trait
-        let state_content =
-            AnyStateEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);
+        let state_event = json!({
+            "event_id": event_id,
+            "room_id": evt.room_id,
+            "type": evt.event_type,
+            "content": &evt.raw_content,
+            "sender": sender,
+            "origin_server_ts": timestamp,
+            "state_key": state_key,
+            "unsigned": &evt.raw_unsigned
+        });
+        let state_event_de = AnyStateEvent::deserialize(state_event);
+        let timeline_content = match state_event_de {
+            Ok(state_event) => TimelineItemContent::StateEvent(Box::new(state_event)),
+            Err(err) => {
+                error!(
+                    event_type = %evt.event_type,
+                    state_key = %state_key,
+                    error = %err,
+                    "Failed to parse state event content"
+                );
+                TimelineItemContent::FailedToParseState {
+                    event_type: StateEventType::from(evt.event_type),
+                    state_key,
+                    error: err.into(),
+                }
+            }
+        };
 
         // TODO: handle redacted state events
 
@@ -276,24 +286,7 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
             sender,
             sender_profile: None, // We don't have profile info in the database
             timestamp,
-            content: match state_content {
-                Ok(content) => {
-                    TimelineItemContent::OtherState(Box::new(OtherState { state_key, content }))
-                }
-                Err(error) => {
-                    error!(
-                        event_type = %evt.event_type,
-                        state_key = %state_key,
-                        error = %error,
-                        "Failed to parse state event content"
-                    );
-                    TimelineItemContent::FailedToParseState {
-                        event_type: StateEventType::from(evt.event_type),
-                        state_key,
-                        error: error.into(),
-                    }
-                }
-            },
+            content: timeline_content,
             raw_content: evt.raw_content.0,
         })
     } else {
