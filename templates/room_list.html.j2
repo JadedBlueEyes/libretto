@@ -59,18 +59,16 @@
                 </div>
 
                 <header class="room-card-header">
-                    <div class="room-avatar">
+                    <div class="room-avatar avatar-container {{ room.avatar_color_class() }}">
                         {% if let Some(avatar_url) = room.avatar_url %}
-                        <img class="room-avatar-image"
+                        <img class="room-avatar-image avatar-image"
                              src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}"
-                             alt=""
+                             alt="{{ room.name_initials() }}    "
                              loading="lazy"
                              width="64"
                              height="64">
                         {% else %}
-                        <div class="room-avatar-fallback">
-                            {{ room.name_initial() }}
-                        </div>
+                        {{ room.name_initials() }}
                         {% endif %}
                     </div>
                     <h3 class="room-name">{{ room.name.to_string() }}</h3>

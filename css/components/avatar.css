@@ -1,0 +1,96 @@
+
+.avatar-container {
+    border-radius: 512px;
+
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-weight: var(--font-weight-bold);
+    font-size: var(--font-size-sm);
+    color: white;
+    text-decoration: none;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-overflow: clip;
+
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    width: 100%;
+}
+
+.avatar-image {
+    border-radius: 512px;
+
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    width: 100%;
+}
+
+.avatar-container[class*="avatar-color-"],
+.sender-avatar[class*="avatar-color-"],
+.room-avatar[class*="avatar-color-"] {
+    background-image:
+        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.05) 0%, transparent 50%),
+        linear-gradient(135deg, var(--avatar-primary), var(--avatar-secondary));
+}
+
+.avatar-color-1 {
+    --avatar-primary: var(--avatar-color-1-primary);
+    --avatar-secondary: var(--avatar-color-1-secondary);
+}
+.avatar-color-2 {
+    --avatar-primary: var(--avatar-color-2-primary);
+    --avatar-secondary: var(--avatar-color-2-secondary);
+}
+.avatar-color-3 {
+    --avatar-primary: var(--avatar-color-3-primary);
+    --avatar-secondary: var(--avatar-color-3-secondary);
+}
+.avatar-color-4 {
+    --avatar-primary: var(--avatar-color-4-primary);
+    --avatar-secondary: var(--avatar-color-4-secondary);
+}
+.avatar-color-5 {
+    --avatar-primary: var(--avatar-color-5-primary);
+    --avatar-secondary: var(--avatar-color-5-secondary);
+}
+.avatar-color-6 {
+    --avatar-primary: var(--avatar-color-6-primary);
+    --avatar-secondary: var(--avatar-color-6-secondary);
+}
+.avatar-color-7 {
+    --avatar-primary: var(--avatar-color-7-primary);
+    --avatar-secondary: var(--avatar-color-7-secondary);
+}
+.avatar-color-8 {
+    --avatar-primary: var(--avatar-color-8-primary);
+    --avatar-secondary: var(--avatar-color-8-secondary);
+}
+.avatar-color-9 {
+    --avatar-primary: var(--avatar-color-9-primary);
+    --avatar-secondary: var(--avatar-color-9-secondary);
+}
+.avatar-color-10 {
+    --avatar-primary: var(--avatar-color-10-primary);
+    --avatar-secondary: var(--avatar-color-10-secondary);
+}
+
+.avatar-container.room-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: var(--font-size-lg);
+}
+
+div.sender-avatar {
+    grid-area: avatar;
+}

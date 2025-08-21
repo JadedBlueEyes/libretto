@@ -44,6 +44,28 @@
 	--hint-color: var(--light-black);
 	--projects-bg: var(--aqua-haze);
 
+	/* Avatar color variations */
+	--avatar-color-1-primary: var(--blue);
+	--avatar-color-1-secondary: var(--purple);
+	--avatar-color-2-primary: var(--purple);
+	--avatar-color-2-secondary: var(--orange);
+	--avatar-color-3-primary: var(--orange);
+	--avatar-color-3-secondary: var(--yellow);
+	--avatar-color-4-primary: var(--green);
+	--avatar-color-4-secondary: var(--light-blue);
+	--avatar-color-5-primary: var(--light-blue);
+	--avatar-color-5-secondary: var(--blue);
+	--avatar-color-6-primary: var(--red);
+	--avatar-color-6-secondary: var(--orange);
+	--avatar-color-7-primary: var(--purple);
+	--avatar-color-7-secondary: var(--red);
+	--avatar-color-8-primary: var(--green);
+	--avatar-color-8-secondary: var(--yellow);
+	--avatar-color-9-primary: var(--blue);
+	--avatar-color-9-secondary: var(--light-blue);
+	--avatar-color-10-primary: var(--orange);
+	--avatar-color-10-secondary: var(--purple);
+
 	@media (prefers-color-scheme: dark) {
 		color-scheme: dark;
 

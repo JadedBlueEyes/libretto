@@ -1,23 +1,15 @@
-<div class="sender-avatar" role="img" aria-label="Avatar for {{ event.sender.as_str() }}">
+<div class="sender-avatar avatar-container {{ self::get_avatar_color_class(event.sender.as_str()) }}" role="img" aria-label="Avatar for {{ event.sender.as_str() }}">
     {% if let Some(profile) = event.sender_profile %}
         {% if let Some(avatar_url) = profile.avatar_url %}
-            <img class="avatar"
+            <img class="avatar avatar-image"
                  src="/media/plain/thumbnail:100x100/{{ avatar_url.to_string() | urlencode_strict }}"
-                 alt="{{ event.sender.as_str() }}"
+                 alt="{{ self::user_initials(event.sender.as_str(), profile.display_name.as_deref()) }}"
                  loading="lazy">
         {% else %}
-            <div class="avatar-fallback">
-                {% if let Some(display_name) = profile.display_name %}
-                    {{ display_name }}
-                {% else %}
-                    {{ event.sender.as_str() }}
-                {% endif %}
-            </div>
+        {{ self::user_initials(event.sender.as_str(), profile.display_name.as_deref()) }}
         {% endif %}
     {% else %}
-        <div class="avatar-fallback">
-            {{ event.sender.as_str() }}
-        </div>
+        {{ self::user_initials(event.sender.as_str(), None) }}
     {% endif %}
 </div>
 <div class="sender-profile">

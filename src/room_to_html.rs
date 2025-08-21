@@ -208,3 +208,144 @@ pub(crate) fn membership_change_description(
         _ => "Unknown membership change".to_string(),
     }
 }
+
+/// Generate initials from a display name or user ID
+pub(crate) fn get_initials(name: &str) -> String {
+    if name.is_empty() {
+        return "?".to_string();
+    }
+
+    // Remove @ symbol if present (for Matrix user IDs)
+    let clean_name = name.strip_prefix('@').unwrap_or(name);
+
+    // For Matrix user IDs, split by colon first to get the local part
+    let local_part = if clean_name.contains(':') {
+        clean_name.split(':').next().unwrap_or(clean_name)
+    } else {
+        clean_name
+    };
+
+    // Split by spaces, dots, underscores, or hyphens
+    let words: Vec<&str> = local_part
+        .split(&[' ', '.', '_', '-'][..])
+        .filter(|word| !word.is_empty())
+        .collect();
+
+    if words.is_empty() {
+        return "?".to_string();
+    }
+
+    if words.len() == 1 {
+        // Single word: take first two characters
+        words[0].chars().take(2).collect::<String>().to_uppercase()
+    } else {
+        // Multiple words: take first character of first two words
+        let first = words[0].chars().next().unwrap_or('?');
+        let second = words[1].chars().next().unwrap_or('?');
+        format!("{first}{second}").to_uppercase()
+    }
+}
+
+/// Generate a consistent color class based on a string (user ID or room ID)
+pub(crate) fn get_avatar_color_class(id: &str) -> String {
+    // Simple hash function to get consistent color assignment
+    let mut hash: u32 = 0;
+    for byte in id.bytes() {
+        hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+    }
+
+    // Map to one of 10 color classes
+    let color_index = (hash % 10) + 1;
+    format!("avatar-color-{color_index}")
+}
+
+/// Extract initials from user ID, preferring display name if available
+pub(crate) fn user_initials(user_id: &str, display_name: Option<&str>) -> String {
+    match display_name {
+        Some(name) if !name.trim().is_empty() => get_initials(name),
+        _ => get_initials(user_id),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_initials() {
+        // Test basic cases
+        assert_eq!(get_initials("John Doe"), "JD");
+        assert_eq!(get_initials("Alice Smith"), "AS");
+        assert_eq!(get_initials("alice"), "AL");
+        assert_eq!(get_initials("Bob"), "BO");
+
+        // Test Matrix user IDs
+        assert_eq!(get_initials("@user:matrix.org"), "US");
+        assert_eq!(get_initials("@alice:example.com"), "AL");
+
+        // Test edge cases
+        assert_eq!(get_initials(""), "?");
+        assert_eq!(get_initials("   "), "?");
+        assert_eq!(get_initials("@"), "?");
+
+        // Test with separators
+        assert_eq!(get_initials("first.last"), "FL");
+        assert_eq!(get_initials("user_name"), "UN");
+        assert_eq!(get_initials("foo-bar"), "FB");
+
+        // Test multiple spaces
+        assert_eq!(get_initials("John   Doe"), "JD");
+        assert_eq!(get_initials("A B C"), "AB");
+
+        // Test single character names
+        assert_eq!(get_initials("A"), "A");
+        assert_eq!(get_initials("X Y"), "XY");
+    }
+
+    #[test]
+    fn test_get_avatar_color_class() {
+        // Test that same input gives same output
+        let class1 = get_avatar_color_class("@user:matrix.org");
+        let class2 = get_avatar_color_class("@user:matrix.org");
+        assert_eq!(class1, class2);
+
+        // Test that different inputs give potentially different outputs
+        let class_a = get_avatar_color_class("@alice:matrix.org");
+        let class_b = get_avatar_color_class("@bob:matrix.org");
+        // They might be the same due to hash collisions, but that's OK
+
+        // Test format
+        assert!(class_a.starts_with("avatar-color-"));
+        assert!(class_b.starts_with("avatar-color-"));
+
+        // Test that color numbers are in valid range (1-10)
+        for id in &["@test1", "@test2", "@test3", "room1", "room2"] {
+            let class = get_avatar_color_class(id);
+            assert!(class.starts_with("avatar-color-"));
+            let number_part = class.strip_prefix("avatar-color-").unwrap();
+            let number: u32 = number_part.parse().unwrap();
+            assert!((1..=10).contains(&number));
+        }
+    }
+
+    #[test]
+    fn test_user_initials() {
+        // Test with display name
+        assert_eq!(user_initials("@user:matrix.org", Some("John Doe")), "JD");
+        assert_eq!(
+            user_initials("@alice:matrix.org", Some("Alice Smith")),
+            "AS"
+        );
+
+        // Test without display name
+        assert_eq!(user_initials("@user:matrix.org", None), "US");
+        assert_eq!(user_initials("@alice:matrix.org", None), "AL");
+
+        // Test with empty display name (should fall back to user ID)
+        assert_eq!(user_initials("@user:matrix.org", Some("")), "US");
+        assert_eq!(user_initials("@alice:matrix.org", Some("")), "AL");
+
+        // Test with whitespace-only display name
+        assert_eq!(user_initials("@user:matrix.org", Some("   ")), "US");
+    }
+}

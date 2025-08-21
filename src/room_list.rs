@@ -48,6 +48,47 @@ impl RoomListEntry {
             .unwrap_or_else(|| "?".to_string())
     }
 
+    /// Get initials from room name for avatar fallback
+    pub fn name_initials(&self) -> String {
+        let name = self.name.to_string();
+        if name.is_empty() {
+            return "?".to_string();
+        }
+
+        // Split by spaces, dots, underscores, or hyphens
+        let words: Vec<&str> = name
+            .split(&[' ', '.', '_', '-'][..])
+            .filter(|word| !word.is_empty())
+            .collect();
+
+        if words.is_empty() {
+            return "?".to_string();
+        }
+
+        if words.len() == 1 {
+            // Single word: take first two characters
+            words[0].chars().take(2).collect::<String>().to_uppercase()
+        } else {
+            // Multiple words: take first character of first two words
+            let first = words[0].chars().next().unwrap_or('?');
+            let second = words[1].chars().next().unwrap_or('?');
+            format!("{first}{second}").to_uppercase()
+        }
+    }
+
+    /// Get avatar color class for consistent room avatar colors
+    pub fn avatar_color_class(&self) -> String {
+        // Simple hash function to get consistent color assignment
+        let mut hash: u32 = 0;
+        for byte in self.id.as_str().bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+        }
+
+        // Map to one of 10 color classes
+        let color_index = (hash % 10) + 1;
+        format!("avatar-color-{color_index}")
+    }
+
     /// Check if the room has unread messages
     pub fn has_unread(&self) -> bool {
         self.unread_count > 0

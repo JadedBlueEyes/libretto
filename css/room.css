@@ -4,4 +4,5 @@
 @import "core/base.css";
 
 @import "components/room.css";
+@import "components/avatar.css";
 @import "components/messages.css";
