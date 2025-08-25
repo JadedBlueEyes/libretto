@@ -47,7 +47,7 @@
              </details>
     {% endmatch %}
 
-    <time class="timestamp-inner" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
+    <time class="timestamp-inner" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_short_format_string(event.timestamp) }}</time>
 </div>
 
-<time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
+<time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_short_format_string(event.timestamp) }}</time>
