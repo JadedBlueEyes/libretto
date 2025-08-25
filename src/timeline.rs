@@ -242,15 +242,70 @@ pub struct DbTimelineEvent {
     pub megolm_session_id: Option<String>,
 
     pub transaction_id: Option<String>,
+
+    /// The JSON serialization of the content of the edit event, if this event has been edited
+    #[sqlx(rename = "edit_content")]
+    pub edit_content: Option<sqlx::types::Json<Box<serde_json::value::RawValue>>>,
 }
 
 /// Build a TimelineEvent from a database row
 pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<TimelineEvent> {
+    // Hide edit events
+    if let Some(ref relation_type) = evt.relation_type {
+        if relation_type == "m.replace" {
+            return Ok(TimelineEvent {
+                event_id: evt.event_id.try_into()?,
+                sender: evt.sender.try_into()?,
+                sender_profile: None,
+                timestamp: MilliSecondsSinceUnixEpoch(evt.timestamp.try_into()?),
+                content: TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
+                    kind: MsgLikeKind::Hidden,
+                    reactions: ReactionsByKeyBySender::default(),
+                    in_reply_to: None,
+                    thread_root: None,
+                })),
+                same_sender: false,
+                raw_content: evt.raw_content.0,
+            });
+        }
+    }
+
     // Extract data from the row
     let event_id: OwnedEventId = evt.event_id.try_into()?;
     let sender: OwnedUserId = evt.sender.try_into()?;
     let timestamp = MilliSecondsSinceUnixEpoch(evt.timestamp.try_into()?);
-    // (*evt.content).des
+
+    // Parse event edits
+    let edit_content = if let Some(edit_raw) = evt.edit_content {
+        match serde_json::from_str::<serde_json::Value>(edit_raw.get()) {
+            Ok(edit_json) => {
+                edit_json.get("m.new_content")
+                    .and_then(|content| {
+                        match serde_json::from_value::<RoomMessageEventContentWithoutRelation>(content.clone()) {
+                            Ok(parsed) => Some(parsed),
+                            Err(e) => {
+                                tracing::warn!(
+                                    event_id = %event_id,
+                                    error = %e,
+                                    "Failed to parse m.new_content as RoomMessageEventContentWithoutRelation"
+                                );
+                                None
+                            }
+                        }
+                    })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    event_id = %event_id,
+                    error = %e,
+                    "Failed to parse edit content as JSON"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     if let Some(state_key) = evt.state_key {
         let state_event = json!({
@@ -321,7 +376,7 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
             sender_profile: None, // We don't have profile info in the database
             timestamp,
             content: match message_content {
-                Ok(content) => messagelike_to_content(content).await?,
+                Ok(content) => messagelike_to_content_with_edit(content, edit_content).await?,
                 Err(error) => {
                     error!(
                         event_type = %evt.event_type,
@@ -342,18 +397,29 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
 async fn messagelike_to_content(
     msg_like: AnyMessageLikeEventContent,
 ) -> eyre::Result<TimelineItemContent> {
+    messagelike_to_content_with_edit(msg_like, None).await
+}
+
+async fn messagelike_to_content_with_edit(
+    msg_like: AnyMessageLikeEventContent,
+    edit_content: Option<RoomMessageEventContentWithoutRelation>,
+) -> eyre::Result<TimelineItemContent> {
     let content = match msg_like {
         AnyMessageLikeEventContent::RoomMessage(room_message_event_content) => {
-            let message = Message::from_event(
-                room_message_event_content.msgtype.clone(),
-                room_message_event_content
-                    .relates_to
-                    .as_ref()
-                    .and_then(|rel| match rel {
-                        Relation::Replacement(r) => Some(r.new_content.clone()),
-                        _ => None,
-                    }),
-            );
+            // Check for inline edit content first
+            let inline_edit = room_message_event_content
+                .relates_to
+                .as_ref()
+                .and_then(|rel| match rel {
+                    Relation::Replacement(r) => Some(r.new_content.clone()),
+                    _ => None,
+                });
+
+            let final_edit = edit_content.or(inline_edit);
+
+            let message =
+                Message::from_event(room_message_event_content.msgtype.clone(), final_edit);
+
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
                 kind: MsgLikeKind::Message(message),
                 reactions: ReactionsByKeyBySender::default(),

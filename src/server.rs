@@ -120,12 +120,14 @@ pub async fn room_internal(
     let mut rows: Vec<DbTimelineEvent> = sqlx::query_as(
                     r#"SELECT
                         event.rowid, timeline.rowid as timeline_rowid,
-                        event.room_id, event_id, sender, event_type, state_key,
-                        timestamp, content::jsonb,
-                        unsigned::jsonb, transaction_id, redacted_by, relates_to, relation_type,
-                        megolm_session_id, last_edit_rowid
+                        event.room_id, event.event_id, event.sender, event.event_type, event.state_key,
+                        event.timestamp, event.content::jsonb,
+                        event.unsigned::jsonb, event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,
+                        event.megolm_session_id, event.last_edit_rowid,
+                        edit_event.content::jsonb as edit_content
                     FROM timeline
                     JOIN event ON event.rowid = timeline.event_rowid
+                    LEFT JOIN event AS edit_event ON event.last_edit_rowid = edit_event.rowid
                     WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)
                     ORDER BY timeline.rowid DESC
                     LIMIT $4;"#,
