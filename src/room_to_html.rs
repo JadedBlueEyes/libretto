@@ -75,16 +75,47 @@ pub(crate) fn timestamp_to_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
 pub(crate) fn timestamp_to_format_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_format_string(ts.0.into())
 }
+pub(crate) fn timestamp_to_short_format_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
+    milliseconds_since_unix_epoch_to_short_format_string(ts.0.into())
+}
 
 pub(crate) fn milliseconds_since_unix_epoch_to_string(milliseconds: i64) -> String {
     Timestamp::from_millisecond(milliseconds)
         .map_or_else(|_| "Unknown Time".to_string(), |ts| ts.to_string())
 }
 
-pub(crate) fn milliseconds_since_unix_epoch_to_format_string(milliseconds: i64) -> String {
-    let field_set_with_options = fieldsets::YMD::long().with_time_hm();
+pub(crate) fn milliseconds_since_unix_epoch_to_short_format_string(milliseconds: i64) -> String {
     let locale = locale!("en-GB");
     let calendar = AnyCalendar::new(AnyCalendarKind::new(locale.clone().into()));
+
+    let field_set_with_options =
+        fieldsets::T::short().with_time_precision(icu::datetime::options::TimePrecision::Minute);
+
+    let formatter: DateTimeFormatter<_> =
+        DateTimeFormatter::try_new(locale.into(), field_set_with_options)
+            .expect("Failed to create DateTimeFormatter");
+    Timestamp::from_millisecond(milliseconds).map_or_else(
+        |_| "Unknown Time".to_string(),
+        |ts| {
+            formatter
+                .format(
+                    &convert_from_datetime(
+                        ts.in_tz("UTC")
+                            .expect("Failed to convert to UTC")
+                            .datetime(),
+                    )
+                    .to_calendar(&calendar),
+                )
+                .to_string()
+        },
+    )
+}
+
+pub(crate) fn milliseconds_since_unix_epoch_to_format_string(milliseconds: i64) -> String {
+    let locale = locale!("en-GB");
+    let calendar = AnyCalendar::new(AnyCalendarKind::new(locale.clone().into()));
+
+    let field_set_with_options = fieldsets::YMD::long().with_time_hm();
 
     let formatter: DateTimeFormatter<_> =
         DateTimeFormatter::try_new(locale.into(), field_set_with_options)

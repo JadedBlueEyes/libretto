@@ -46,5 +46,8 @@
                  <pre class="unsupported-event-content">{{ format!("{:?}", state_event) }}</pre>
              </details>
     {% endmatch %}
-    <time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
+
+    <time class="timestamp-inner" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
 </div>
+
+<time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>

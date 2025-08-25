@@ -9,7 +9,7 @@ use matrix_sdk::{
     Client,
     media::{MediaFormat, MediaThumbnailSettings},
 };
-use ruma::events::room::MediaSource;
+use ruma::{events::room::MediaSource, uint};
 use tracing::{info, warn};
 
 use crate::timeline::TimelineEvent;
@@ -186,13 +186,21 @@ pub async fn room_internal(
     }
 
     // Convert database rows to TimelineEvent objects
-    for row in rows {
+    for (i, row) in rows.into_iter().enumerate() {
         if let Ok(event) = build_timeline_event_from_db(row).await.inspect_err(|e| {
             warn!(
                 error = %e,
                 "Failed to build timeline event from database"
             );
         }) {
+            if let Some(next) = i.checked_sub(1).and_then(|i| timeline.get_mut(i)) {
+                // Check if same sender and within 10 minutes (600,000 milliseconds)
+                if (next.sender == event.sender)
+                    && (next.timestamp.0.saturating_sub(event.timestamp.0) <= uint!(600_000))
+                {
+                    next.same_sender = true;
+                }
+            };
             timeline.push(event);
         }
     }

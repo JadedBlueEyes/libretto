@@ -19,6 +19,25 @@ div.timeline-event {
 		"avatar avatar-gap content content"
 		"avatar avatar-gap content content";
 
+	&.same-sender {
+    	grid-template-areas:
+    		"timestamp avatar-gap content content"
+    		"timestamp avatar-gap content content";
+
+		.sender-profile, .sender-avatar {
+			display: none;
+		}
+
+		.timestamp-trailing {
+    		display: block;
+    		grid-area: timestamp;
+            justify-self: end;
+            font-size: var(--font-size-sm);
+			opacity: 0.8;
+		}
+    }
+
+
 	&:target {
 		background-color: oklab(from yellow .6 a b / 0.4);
 	}
@@ -53,7 +72,7 @@ div.timeline-event {
 		color: red;
 		font-size: var(--font-size-sm);
 	}
-	.timestamp-trailing {
+	.timestamp-inner, .timestamp-trailing {
 		display: none;
 	}
 }

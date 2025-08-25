@@ -1,4 +1,4 @@
-<div class="timeline-event"
+<div class="timeline-event{% if event.same_sender %} same-sender{% endif %}"
          data-raw-event-content="{{ event.raw_content }}"
          data-event-id="{{ event.event_id }}"
          id="event-{{ event.event_id }}"

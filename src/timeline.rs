@@ -28,6 +28,9 @@ pub struct TimelineEvent {
     /// The content of the event.
     pub content: TimelineItemContent,
 
+    /// Whether this event has the same sender as the previous event within 10 minutes.
+    pub same_sender: bool,
+
     /// The JSON serialization of the event.
     pub raw_content: Box<RawValue>,
 }
@@ -287,6 +290,7 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
             sender_profile: None, // We don't have profile info in the database
             timestamp,
             content: timeline_content,
+            same_sender: false, // Will be set later in room processing
             raw_content: evt.raw_content.0,
         })
     } else {
@@ -303,6 +307,7 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
                     in_reply_to: None,
                     thread_root: None,
                 })),
+                same_sender: false, // Will be set later in room processing
                 raw_content: evt.raw_content.0,
             });
         }
@@ -328,6 +333,7 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
                     }
                 }
             },
+            same_sender: false, // Will be set later in room processing
             raw_content: evt.raw_content.0,
         })
     }
