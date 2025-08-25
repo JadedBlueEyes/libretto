@@ -153,7 +153,7 @@ pub enum MsgLikeKind {
 
     Hidden,
 
-    Redacted,
+    Redacted(Option<String>), // reason
 
     UnableToDecrypt,
 
@@ -246,6 +246,50 @@ pub struct DbTimelineEvent {
     /// The JSON serialization of the content of the edit event, if this event has been edited
     #[sqlx(rename = "edit_content")]
     pub edit_content: Option<sqlx::types::Json<Box<serde_json::value::RawValue>>>,
+
+    /// The JSON serialization of the content of the redaction event, if this event has been redacted
+    #[sqlx(rename = "redaction_content")]
+    pub redaction_content: Option<sqlx::types::Json<Box<serde_json::value::RawValue>>>,
+}
+
+fn extract_redaction_reason(redaction_content: &serde_json::value::RawValue) -> Option<String> {
+    let parsed: ruma::events::room::redaction::RoomRedactionEventContent =
+        serde_json::from_str(redaction_content.get()).ok()?;
+    parsed.reason
+}
+
+/// Create a redacted timeline event with appropriate redaction variant.
+///
+/// Creates either `MsgLikeKind::Redacted` or `MsgLikeKind::RedactedWithReason(reason)`
+/// depending on whether a redaction reason is available in the redaction event content.
+///
+/// TODO: Redact the event content based on the room version once we have room state.
+fn create_redacted_timeline_event(
+    event_id: OwnedEventId,
+    sender: OwnedUserId,
+    timestamp: MilliSecondsSinceUnixEpoch,
+    raw_content: Box<serde_json::value::RawValue>,
+    redaction_content: Option<&sqlx::types::Json<Box<serde_json::value::RawValue>>>,
+) -> TimelineEvent {
+    let redaction_reason =
+        redaction_content.and_then(|content| extract_redaction_reason(&content.0));
+
+    let kind = MsgLikeKind::Redacted(redaction_reason);
+
+    TimelineEvent {
+        event_id,
+        sender,
+        sender_profile: None, // We don't have profile info in the database
+        timestamp,
+        content: TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
+            kind,
+            reactions: ReactionsByKeyBySender::default(),
+            in_reply_to: None,
+            thread_root: None,
+        })),
+        same_sender: false, // Will be set later in room processing
+        raw_content,
+    }
 }
 
 /// Build a TimelineEvent from a database row
@@ -336,7 +380,16 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
             }
         };
 
-        // TODO: handle redacted state events
+        // Handle redacted state events
+        if evt.redacted_by.is_some() {
+            return Ok(create_redacted_timeline_event(
+                event_id,
+                sender,
+                timestamp,
+                evt.raw_content.0,
+                evt.redaction_content.as_ref(),
+            ));
+        }
 
         // dbg!(&state_content);
         Ok(TimelineEvent {
@@ -351,20 +404,13 @@ pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<
     } else {
         // let message_raw: Raw::<AnyMessageLikeEventContent> = Raw::from_json(evt.raw_content.0);
         if evt.redacted_by.is_some() {
-            return Ok(TimelineEvent {
+            return Ok(create_redacted_timeline_event(
                 event_id,
                 sender,
-                sender_profile: None, // We don't have profile info in the database
                 timestamp,
-                content: TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
-                    kind: MsgLikeKind::Redacted,
-                    reactions: ReactionsByKeyBySender::default(),
-                    in_reply_to: None,
-                    thread_root: None,
-                })),
-                same_sender: false, // Will be set later in room processing
-                raw_content: evt.raw_content.0,
-            });
+                evt.raw_content.0,
+                evt.redaction_content.as_ref(),
+            ));
         }
         let message_content =
             AnyMessageLikeEventContent::from_parts(evt.event_type.as_str(), &evt.raw_content.0);

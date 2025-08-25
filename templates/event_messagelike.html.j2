@@ -367,9 +367,13 @@
                     <div class="verification-action">Key verification completed successfully</div>
                 </div>
             </div>
-        {% when MsgLikeKind::Redacted %}
+        {% when MsgLikeKind::Redacted(reason) %}
             <div class="redaction-text plaintext-body">
-                Message was redacted.
+                {% if let Some(reason_text) = reason %}
+                    Message was redacted: {{ reason_text }}
+                {% else %}
+                    Message was redacted.
+                {% endif %}
             </div>
         {% when MsgLikeKind::UnableToDecrypt %}
             <div class="unable-to-decrypt">

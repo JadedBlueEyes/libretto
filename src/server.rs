@@ -124,10 +124,18 @@ pub async fn room_internal(
                         event.timestamp, event.content::jsonb,
                         event.unsigned::jsonb, event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,
                         event.megolm_session_id, event.last_edit_rowid,
-                        edit_event.content::jsonb as edit_content
+                        edit_event.content::jsonb as edit_content,
+                        redaction_event.content::jsonb as redaction_content
                     FROM timeline
                     JOIN event ON event.rowid = timeline.event_rowid
+                        AND event.room_id = timeline.room_id
+                        AND event.user_id = timeline.user_id
                     LEFT JOIN event AS edit_event ON event.last_edit_rowid = edit_event.rowid
+                        AND event.room_id = edit_event.room_id
+                        AND event.user_id = edit_event.user_id
+                    LEFT JOIN event AS redaction_event ON event.redacted_by = redaction_event.event_id
+                        AND event.room_id = redaction_event.room_id
+                        AND event.user_id = redaction_event.user_id
                     WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)
                     ORDER BY timeline.rowid DESC
                     LIMIT $4;"#,
