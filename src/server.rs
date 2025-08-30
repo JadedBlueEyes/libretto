@@ -1,15 +1,18 @@
+use std::sync::OnceLock;
+
 use axum::{
     Router, extract,
     http::header,
     response::{Html, IntoResponse},
     routing::get,
 };
-use color_eyre::eyre;
+use color_eyre::eyre::{self, ContextCompat};
 use matrix_sdk::{
     Client,
     media::{MediaFormat, MediaThumbnailSettings},
 };
 use ruma::{events::room::MediaSource, uint};
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::timeline::TimelineEvent;
@@ -27,27 +30,30 @@ use sqlx::Row;
 
 #[derive(Clone, extract::FromRef)]
 struct AppState {
-    client: Client,
+    // client: Client,
     db: DatabasePool,
 }
 
 /// Sets up the Axum router with all routes and state.
-pub fn build_router(client: Client, db: DatabasePool) -> Router {
+pub fn build_router(db: DatabasePool) -> Router {
     Router::new()
         .route("/room/{room_id}/{page}", get(room_page))
         .route("/room/{room_id}", get(room))
         .route("/media/plain/{dimensions}/{media_id}", get(load_media_file))
         .route("/", get(index))
         .fallback(get(crate::assets::static_service::<Dist>))
-        .with_state(AppState { db, client })
+        .with_state(AppState { db })
+}
+
+pub(crate) static CLIENT: OnceLock<RwLock<Client>> = OnceLock::new();
+fn primary_client() -> Result<&'static RwLock<Client>, eyre::Error> {
+    CLIENT.get().context("Clients are not initialised")
 }
 
 /// Handler for the index route, listing all rooms.
-pub async fn index(
-    extract::State(client): extract::State<Client>,
-) -> Result<impl IntoResponse, AppError> {
+pub async fn index() -> Result<impl IntoResponse, AppError> {
     let mut list = RoomList::new();
-    for room in client.joined_rooms() {
+    for room in primary_client()?.read().await.joined_rooms() {
         if let Ok(room_entry) = room_to_list_entry(&room).await {
             list.add_room(room_entry);
         }
@@ -62,24 +68,24 @@ pub async fn index(
 //
 
 /// Handler for the room route, showing timeline for a room.
+
+#[axum::debug_handler]
 pub async fn room(
-    extract::State(client): extract::State<Client>,
     extract::State(db): extract::State<DatabasePool>,
     extract::Path(room_id): extract::Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    room_internal(client, db, room_id, None).await
+    room_internal(db, room_id, None).await
 }
 
+#[axum::debug_handler]
 pub async fn room_page(
-    extract::State(client): extract::State<Client>,
     extract::State(db): extract::State<DatabasePool>,
     extract::Path((room_id, last_rowid)): extract::Path<(String, Option<i32>)>,
 ) -> Result<impl IntoResponse, AppError> {
-    room_internal(client, db, room_id, last_rowid).await
+    room_internal(db, room_id, last_rowid).await
 }
 /// Handler for the room route, showing timeline for a room.
 pub async fn room_internal(
-    client: Client,
     db: DatabasePool,
     room_id: String,
     last_rowid: Option<i32>,
@@ -87,7 +93,12 @@ pub async fn room_internal(
     use matrix_sdk::ruma::{OwnedRoomId, RoomAliasId};
 
     let room_id: OwnedRoomId = if let Ok(alias) = <&RoomAliasId>::try_from(room_id.as_str()) {
-        client.resolve_room_alias(alias).await?.room_id
+        primary_client()?
+            .read()
+            .await
+            .resolve_room_alias(alias)
+            .await?
+            .room_id
     } else {
         OwnedRoomId::try_from(room_id.as_str())
             .map_err(AppError::from)
@@ -103,12 +114,16 @@ pub async fn room_internal(
     //         tracing::error!("Failed to download room keys for room {room_id}: {e}");
     //     })?;
 
-    let room = client
+    let room = primary_client()?
+        .read()
+        .await
         .get_room(&room_id)
         .ok_or_else(|| eyre::eyre!("Failed to get room"))?;
 
     // Get the current user ID
-    let user_id = client
+    let user_id = primary_client()?
+        .read()
+        .await
         .user_id()
         .ok_or_else(|| eyre::eyre!("User not logged in"))?
         .to_owned();
@@ -235,7 +250,6 @@ pub async fn room_internal(
 }
 
 pub async fn load_media_file(
-    extract::State(client): extract::State<Client>,
     extract::Path((dimensions, media_id)): extract::Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
     let request = matrix_sdk::media::MediaRequestParameters {
@@ -254,7 +268,12 @@ pub async fn load_media_file(
             _ => return Err(eyre::format_err!("Invalid dimension format").into()),
         },
     };
-    let media = client.media().get_media_content(&request, true).await?;
+    let media = primary_client()?
+        .read()
+        .await
+        .media()
+        .get_media_content(&request, true)
+        .await?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/octet-stream"),
@@ -292,11 +311,11 @@ pub async fn shutdown_signal() {
     }
 }
 
-pub async fn serve(primary_client: matrix_sdk::Client, db: DatabasePool) -> eyre::Result<()> {
+pub async fn serve(db: DatabasePool) -> eyre::Result<()> {
     info!("Starting web server");
 
     // Build the router with the primary client
-    let app = build_router(primary_client, db);
+    let app = build_router(db);
 
     // Setup TCP listener with support for systemfd/listenfd
     let listener = setup_tcp_listener().await?;

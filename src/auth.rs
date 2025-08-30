@@ -11,6 +11,8 @@ use crate::account::config::{AccountDetails, AuthMethod};
 use crate::session::{ClientSession, FullSession};
 use ruma::UserId;
 
+/// Login to a Matrix account using the provided configuration.
+/// Creates a new client database from scratch.
 #[instrument(level = "info", skip(data_dir, cache_dir, config), fields(user_id = %config.user_id, homeserver = ?config.homeserver))]
 pub async fn login(
     data_dir: &std::path::Path,
@@ -22,20 +24,23 @@ pub async fn login(
         homeserver = %config.homeserver.as_ref().map_or_else(|| "<from user_id>", |s| s),
         "Starting authentication"
     );
-    let mut rng = rand::rng();
-
     // Generate a random passphrase.
-    let passphrase: String = (&mut rng)
-        .sample_iter(Alphanumeric)
-        .take(32)
-        .map(char::from)
-        .collect();
 
-    let db_path: String = (&mut rng)
-        .sample_iter(Alphanumeric)
-        .take(7)
-        .map(char::from)
-        .collect();
+    let (db_path, passphrase): (String, String) = {
+        let mut rng = rand::rng();
+        (
+            (&mut rng)
+                .sample_iter(Alphanumeric)
+                .take(7)
+                .map(char::from)
+                .collect(),
+            (&mut rng)
+                .sample_iter(Alphanumeric)
+                .take(32)
+                .map(char::from)
+                .collect(),
+        )
+    };
 
     // Get homeserver URL or name
     let homeserver_url = if let Some(homeserver) = &config.homeserver {

@@ -1,14 +1,26 @@
-use color_eyre::eyre;
+use color_eyre::eyre::{self, Context, eyre};
+use config::{Config, File};
+use futures::TryFutureExt;
 use futures::future::join_all;
 use matrix_sdk::{Client, config::SyncSettings, sync::SyncResponse};
 use ruma::UserId;
 use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::account::config::AccountDetails;
+use crate::config::ConfigFile;
+use crate::session::{load_session_from_db, restore_session};
 use crate::{DatabaseConnection, DatabasePool, room_list, server};
+
+/// Total number of sync failures allowed before reinitializing the client.
+const MAX_SYNC_FAILURES: u32 = 10;
+
+/// Backoff cap for sync retries (in power of 2 seconds).
+/// This limits exponential backoff to prevent excessively long wait times.
+const MAX_BACKOFF_POWER: u32 = 7;
 
 /// Handles device management for the Matrix client.
 pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Result<()> {
@@ -328,20 +340,54 @@ fn extract_mxc_uris_recursive(value: &serde_json::Value, mxc_uris: &mut Vec<Stri
     }
 }
 
-/// Represents a client with its associated account configuration and sync token
+/// Represents a client with its associated account configuration and sync state.
 #[derive(Debug)]
 pub struct ClientSession {
+    /// The Matrix SDK client instance
     pub client: Client,
+    /// Account configuration; may be used to recreate the client if needed
     pub account_config: AccountDetails,
+    /// Current sync token
     pub sync_token: Option<String>,
 }
 
 /// Result of processing sessions - contains clients ready for sync
 /// Run sync tasks for all clients
 pub async fn run_sync_tasks(
-    client_sessions: Vec<ClientSession>,
+    // client_sessions: Vec<ClientSession>,
+    config_file: std::path::PathBuf,
     db: &DatabasePool,
+    data_dir: &std::path::Path,
+    cache_dir: &std::path::Path,
 ) -> eyre::Result<()> {
+    // Load config file
+    let config_file: ConfigFile = Config::builder()
+        .add_source(File::from(config_file))
+        .build()
+        .context("Failed to load config file")?
+        .try_deserialize()
+        .context("Failed to deserialize config file")?;
+
+    // Process sessions according to configuration
+    let client_sessions =
+        crate::session::process_sessions(db, &config_file, data_dir, cache_dir).await?;
+
+    let primary_account = crate::account::selection::select_primary_account(
+        &config_file.accounts,
+        config_file.primary_user_id.as_deref(),
+    )?;
+    let primary_client = client_sessions
+        .iter()
+        .find(|cs| cs.account_config.user_id == primary_account.user_id)
+        .map(|cs| cs.client.clone())
+        .ok_or_else(|| {
+            eyre::eyre!(
+                "No client found for primary account: {}",
+                primary_account.user_id
+            )
+        })?;
+    let _ = server::CLIENT.set(RwLock::new(primary_client));
+
     if client_sessions.is_empty() {
         warn!("No clients available for sync tasks");
         return Ok(());
@@ -350,7 +396,7 @@ pub async fn run_sync_tasks(
     // Spawn sync tasks for all clients
     let sync_tasks: Vec<_> = client_sessions
         .into_iter()
-        .map(|client_session| spawn_sync_task(client_session, db.clone()))
+        .map(|client_session| spawn_sync_task(client_session, db.clone(), data_dir, cache_dir))
         .collect();
 
     info!(sync_task_count = sync_tasks.len(), "Starting sync tasks");
@@ -363,37 +409,68 @@ pub async fn run_sync_tasks(
 }
 
 /// Spawn a sync task for a given client session
-fn spawn_sync_task(client_session: ClientSession, db: DatabasePool) -> tokio::task::JoinHandle<()> {
-    let ClientSession {
-        client,
-        account_config: _,
-        sync_token,
-    } = client_session;
-
+fn spawn_sync_task(
+    mut client_session: ClientSession,
+    db: DatabasePool,
+    data_dir: &std::path::Path,
+    cache_dir: &std::path::Path,
+) -> tokio::task::JoinHandle<()> {
+    let data_dir = data_dir.to_owned();
+    let cache_dir = cache_dir.to_owned();
     tokio::spawn(async move {
-        let user_id = client.user_id().expect("Client should be logged in");
+        let user_id = client_session
+            .client
+            .user_id()
+            .expect("Client should be logged in");
         let user_id_string = user_id.to_string();
         info!(
             user_id = %user_id_string,
             "Starting sync task"
         );
 
-        // Initial room update
-        if let Err(e) = perform_initial_room_update(&client, &db).await {
-            warn!(
-                user_id = %user_id_string,
-                error = %e,
-                "Failed initial room update"
-            );
-        }
+        loop {
+            if let Err(e) = perform_initial_room_update(&client_session.client, &db).await {
+                warn!(
+                    user_id = %user_id_string,
+                    error = %e,
+                    "Failed initial room update"
+                );
+            }
 
-        // Run sync loop
-        if let Err(e) = run_sync_loop(client, db, sync_token).await {
-            error!(
-                user_id = %user_id_string,
-                error = %e,
-                "Sync loop failed"
-            );
+            if let Err(e) =
+                run_sync_loop(client_session.client, &db, client_session.sync_token).await
+            {
+                match load_session_from_db(&db, &user_id_string)
+                    .and_then(async |session| {
+                        if let Some(session) = session {
+                            restore_session(&session, &data_dir, &cache_dir)
+                                .await
+                                .map(|c| (c, session))
+                        } else {
+                            Err(eyre!("Failed to find session"))
+                        }
+                    })
+                    .await
+                {
+                    Ok((client, session)) => {
+                        client_session = crate::client::ClientSession {
+                            client,
+                            sync_token: session.sync_token,
+                            account_config: client_session.account_config,
+                        };
+                    }
+                    Err(_) => {
+                        error!(
+                            user_id = %user_id_string,
+                            error = %e,
+                            "Failed to restore session"
+                        );
+                        break;
+                    }
+                };
+            } else {
+                break;
+            }
         }
 
         debug!(
@@ -418,9 +495,10 @@ async fn perform_initial_room_update(client: &Client, db: &DatabasePool) -> eyre
 }
 
 /// Run the sync loop for a client
+/// Will return an error if the sync fails enough times in a row
 async fn run_sync_loop(
     client: Client,
-    db: DatabasePool,
+    db: &DatabasePool,
     sync_token: Option<String>,
 ) -> eyre::Result<()> {
     let user_id = client.user_id().expect("Client should be logged in");
@@ -437,7 +515,7 @@ async fn run_sync_loop(
 
     let sync_loop = async {
         loop {
-            let result = perform_sync_once(&client, &db, user_id, &sync_settings).await;
+            let result = perform_sync_once(&client, db, user_id, &sync_settings).await;
 
             match result {
                 Ok(next_batch) => {
@@ -445,12 +523,24 @@ async fn run_sync_loop(
                     backoff = None;
                 }
                 Err(err) => {
-                    let backoff_seconds = 2u64.pow(backoff.unwrap_or(0));
+                    let backoff_seconds = 2u64.pow(backoff.unwrap_or(0).min(MAX_BACKOFF_POWER));
                     error!(
                         user_id = %user_id,
                         error = %err,
                         "Sync error occurred"
                     );
+
+                    backoff = Some(backoff.unwrap_or(0) + 1);
+
+                    // If we've had too many consecutive failures, return an error
+                    let count = backoff.unwrap_or(0);
+                    if count >= MAX_SYNC_FAILURES {
+                        return Err(eyre::eyre!(
+                            "Sync failed {count} consecutive times, last error: {}",
+                            err
+                        ));
+                    }
+
                     warn!(
                         user_id = %user_id,
                         backoff_seconds = backoff_seconds,
@@ -458,7 +548,6 @@ async fn run_sync_loop(
                     );
 
                     sleep(Duration::from_secs(backoff_seconds)).await;
-                    backoff = Some((backoff.unwrap_or(0) + 1).min(7));
                     continue;
                 }
             }
@@ -470,10 +559,22 @@ async fn run_sync_loop(
 
     // Run sync loop with shutdown signal
     tokio::select! {
-        _ = sync_loop => debug!(
-            user_id = %user_id,
-            "Sync loop finished"
-        ),
+        result = sync_loop => {
+            match result {
+                Ok(()) => debug!(
+                    user_id = %user_id,
+                    "Sync loop finished"
+                ),
+                Err(e) => {
+                    error!(
+                        user_id = %user_id,
+                        error = %e,
+                        "Sync loop failed with error"
+                    );
+                    return Err(e);
+                }
+            }
+        },
         _ = server::shutdown_signal() => debug!(
             user_id = %user_id,
             "Sync shutdown requested"

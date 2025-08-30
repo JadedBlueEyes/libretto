@@ -16,13 +16,7 @@ mod session;
 
 use std::str::FromStr;
 
-use crate::{
-    client::run_sync_tasks,
-    config::{CommandConfig, ConfigFile},
-    server::serve,
-    session::process_sessions,
-};
-use ::config::{Config, File};
+use crate::{client::run_sync_tasks, config::CommandConfig, server::serve};
 use clap::Parser;
 use color_eyre::eyre::{self, Context};
 use sqlx::postgres::PgPoolOptions;
@@ -39,32 +33,14 @@ type DatabaseConnection = <Database as sqlx::Database>::Connection;
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> eyre::Result<()> {
     // Setup
-    let (_config, config_file, db, data_dir, cache_dir) = setup().await?;
+    let (config, db, data_dir, cache_dir) = setup().await?;
 
     info!(version = env!("CARGO_PKG_VERSION"), "Starting libretto");
 
-    // Process sessions according to configuration
-    let session_result = process_sessions(&db, &config_file, &data_dir, &cache_dir).await?;
-
-    let primary_account = crate::account::selection::select_primary_account(
-        &config_file.accounts,
-        config_file.primary_user_id.as_deref(),
-    )?;
-    let primary_client = session_result
-        .iter()
-        .find(|cs| cs.account_config.user_id == primary_account.user_id)
-        .map(|cs| cs.client.clone())
-        .ok_or_else(|| {
-            eyre::eyre!(
-                "No client found for primary account: {}",
-                primary_account.user_id
-            )
-        })?;
-
     // Run web server and sync tasks independently
     let (web_server_result, sync_tasks_result) = tokio::join!(
-        serve(primary_client, db.clone()),
-        run_sync_tasks(session_result, &db)
+        serve(db.clone()),
+        run_sync_tasks(config.config_file.clone(), &db, &data_dir, &cache_dir)
     );
 
     // Handle results
@@ -80,7 +56,6 @@ async fn main() -> eyre::Result<()> {
 #[instrument(level = "info")]
 async fn setup() -> eyre::Result<(
     CommandConfig,
-    ConfigFile,
     DatabasePool,
     std::path::PathBuf,
     std::path::PathBuf,
@@ -124,14 +99,6 @@ async fn setup() -> eyre::Result<(
         .await
         .context("Failed to run database migrations")?;
 
-    // Load config file
-    let config_file: ConfigFile = Config::builder()
-        .add_source(File::from(config.config_file.clone()))
-        .build()
-        .context("Failed to load config file")?
-        .try_deserialize()
-        .context("Failed to deserialize config file")?;
-
     // Setup directories
     let data_dir = config.data_dir.clone().unwrap_or_else(|| {
         dirs::data_dir()
@@ -144,5 +111,5 @@ async fn setup() -> eyre::Result<(
             .join("libretto")
     });
 
-    Ok((config, config_file, db, data_dir, cache_dir))
+    Ok((config, db, data_dir, cache_dir))
 }

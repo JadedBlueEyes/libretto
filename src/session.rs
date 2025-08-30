@@ -90,7 +90,10 @@ pub async fn insert_account_session(
 }
 
 /// Load a session from the database, if it exists.
-pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<FullSession>> {
+pub async fn load_session_from_db(
+    db: &DatabasePool,
+    user_id: &str,
+) -> eyre::Result<Option<FullSession>> {
     let maybe_session = sqlx::query!(
         // language=PostgreSQL
         r#"select user_id,
@@ -101,7 +104,9 @@ pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<Full
         db_path,
         db_passphrase,
         next_batch
-        from "account""#
+        from "account"
+        where user_id = $1"#,
+        user_id
     )
     .fetch_optional(db)
     .await?;
@@ -121,7 +126,7 @@ pub async fn load_session_from_db(db: &DatabasePool) -> eyre::Result<Option<Full
                 },
                 tokens: SessionTokens {
                     access_token: session_res.access_token,
-                    refresh_token: None,
+                    refresh_token: session_res.refresh_token,
                 },
             },
         }))
