@@ -306,7 +306,8 @@ pub async fn room_internal(
 
             if let Some(next) = i.checked_sub(1).and_then(|i| timeline.get_mut(i)) {
                 // Check if same sender and within 10 minutes (600,000 milliseconds)
-                if (next.sender == event.sender)
+                if !event.is_hidden_event()
+                    && (next.sender == event.sender)
                     && (next.timestamp.0.saturating_sub(event.timestamp.0) <= uint!(600_000))
                 {
                     next.same_sender = true;
