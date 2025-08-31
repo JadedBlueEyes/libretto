@@ -89,8 +89,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Set up Rust toolchain
 WORKDIR /app
 # COPY ./rust-toolchain.toml .
-RUN rustc --version \
-    && rustup target add $(xx-cargo --print-target-triple)
+RUN xx-cargo --setup-target-triple \
+    && rustc --version
 
 # Build binary
 # We disable incremental compilation to save disk space, as it only produces a minimal speedup for this case.
