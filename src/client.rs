@@ -177,6 +177,17 @@ pub async fn sync_handler(
             )
             .execute(&mut *tx)
             .await?;
+
+            if let Some(prev_batch) = &update.prev_batch {
+                sqlx::query!(
+                    "UPDATE room SET prev_batch = $1 WHERE room_id = $2 AND user_id = $3",
+                    prev_batch,
+                    room_id.to_string(),
+                    user_id.to_string()
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
         }
 
         for event in update.events {
