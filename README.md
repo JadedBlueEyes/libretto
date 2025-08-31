@@ -83,5 +83,4 @@ pnpm build
 - Operational monitoring (Prometheus/Sentry)
 - Advanced media handling (thumbnails, etc.)
 - Automatic history backfill
-- State for member profiles
 - Aggregate reactions
