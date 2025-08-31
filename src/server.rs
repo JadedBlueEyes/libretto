@@ -210,14 +210,100 @@ pub async fn room_internal(
         }
     }
 
+    // Get all unique senders from the timeline events for member profile lookup
+    let mut senders: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for row in &rows {
+        senders.insert(row.sender.clone());
+    }
+
+    // Fetch member profiles from current_state for all senders in the timeline
+    let mut sender_profiles: std::collections::HashMap<String, crate::timeline::Profile> =
+        std::collections::HashMap::new();
+
+    if !senders.is_empty() {
+        let sender_list: Vec<String> = senders.into_iter().collect();
+        let profile_rows = sqlx::query(
+            r#"SELECT cs.state_key as user_id, e.content::jsonb as content
+               FROM current_state cs
+               JOIN event e ON cs.event_rowid = e.rowid
+               WHERE cs.room_id = $1
+                 AND cs.user_id = $2
+                 AND cs.event_type = 'm.room.member'
+                 AND cs.state_key = ANY($3)"#,
+        )
+        .bind(room_id.as_str())
+        .bind(user_id.as_str())
+        .bind(&sender_list)
+        .fetch_all(&db)
+        .await?;
+
+        // First pass: collect all display names and their counts
+        let mut display_name_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        let mut user_display_names: std::collections::HashMap<String, Option<String>> =
+            std::collections::HashMap::new();
+
+        for profile_row in &profile_rows {
+            let sender_id: String = profile_row.get("user_id");
+            let content: serde_json::Value = profile_row.get("content");
+
+            let display_name = content
+                .get("displayname")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            user_display_names.insert(sender_id, display_name.clone());
+
+            if let Some(ref name) = display_name {
+                *display_name_counts.entry(name.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // Second pass: create profiles with ambiguity information
+        for profile_row in profile_rows {
+            let sender_id: String = profile_row.get("user_id");
+            let content: serde_json::Value = profile_row.get("content");
+
+            let display_name = content
+                .get("displayname")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let avatar_url = content
+                .get("avatar_url")
+                .and_then(|v| v.as_str())
+                .map(ruma::OwnedMxcUri::from);
+
+            // Check if display name is ambiguous (used by multiple users)
+            let display_name_ambiguous = display_name
+                .as_ref()
+                .map(|name| display_name_counts.get(name).unwrap_or(&0) > &1)
+                .unwrap_or(false);
+
+            sender_profiles.insert(
+                sender_id,
+                crate::timeline::Profile {
+                    display_name,
+                    display_name_ambiguous,
+                    avatar_url,
+                },
+            );
+        }
+    }
+
     // Convert database rows to TimelineEvent objects
     for (i, row) in rows.into_iter().enumerate() {
-        if let Ok(event) = build_timeline_event_from_db(row).await.inspect_err(|e| {
+        if let Ok(mut event) = build_timeline_event_from_db(row).await.inspect_err(|e| {
             warn!(
                 error = %e,
                 "Failed to build timeline event from database"
             );
         }) {
+            // Set sender profile if we have one
+            if let Some(profile) = sender_profiles.get(&event.sender.to_string()) {
+                event.sender_profile = Some(profile.clone());
+            }
+
             if let Some(next) = i.checked_sub(1).and_then(|i| timeline.get_mut(i)) {
                 // Check if same sender and within 10 minutes (600,000 milliseconds)
                 if (next.sender == event.sender)
