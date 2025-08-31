@@ -30,11 +30,17 @@ impl DistVite {
                 let file = F::get(&path).expect("Failed to get asset from embed");
                 let hash = BASE64_STANDARD.encode(file.metadata.sha256_hash());
                 match file.metadata.mimetype() {
-                    "application/javascript" if path.ends_with(".mjs") => {
+                    "application/javascript" if path.ends_with(".mjs") && chunk.is_entry.unwrap_or(false) => {
                         format!(
                             "<script type=\"module\" src=\"/{path}\" integrity=\"sha256-{hash}\"></script>"
                         )
                     }
+                    "application/javascript" if path.ends_with(".mjs") => {
+                        format!(
+                            "<link rel=\"modulepreload\" as=\"script\" href=\"/{path}\">"
+                        )
+                    }
+
                     "application/javascript" => {
                         format!(
                             "<script src=\"/{path}\" integrity=\"sha256-{hash}\"></script>"

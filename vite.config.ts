@@ -5,7 +5,7 @@ import path from "node:path";
 export default defineConfig({
 	build: {
 		lib: {
-			entry: ["css/room.css", "css/room_list.css", "js/room_list.js"].map((i) =>
+			entry: ["css/room.css", "css/room_list.css", "js/room_list.js", "js/room.js"].map((i) =>
 				path.resolve(__dirname, i),
 			),
 			formats: ["es"],

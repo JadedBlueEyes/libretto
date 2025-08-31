@@ -44,6 +44,11 @@
         linear-gradient(135deg, var(--avatar-primary), var(--avatar-secondary));
 }
 
+.avatar-loaded[class*="avatar-color-"] {
+    background-image: none;
+    background-color: transparent;
+}
+
 .avatar-color-1 {
     --avatar-primary: var(--avatar-color-1-primary);
     --avatar-secondary: var(--avatar-color-1-secondary);

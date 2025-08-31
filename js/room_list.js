@@ -1,3 +1,5 @@
+import { initAvatars } from "./utils/avatar.js"
+
 const directRoomsBtn = document.getElementById("direct-rooms");
 const encryptedRoomsBtn = document.getElementById("encrypted-rooms");
 const unreadRoomsBtn = document.getElementById("unread-rooms");
@@ -74,4 +76,9 @@ unreadRoomsBtn.addEventListener("click", () => {
 roomSearch.addEventListener("input", (e) => {
 	filters.search = e.target.value;
 	applyFilters();
+});
+
+// Initialize avatar handling when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+	initAvatars();
 });

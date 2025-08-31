@@ -9,6 +9,7 @@
             {{ String::from_utf8_lossy(crate::assets::Dist::get("room.css").expect("Failed to get style").data) | safe}}
         /*]]>*/
     </style>
+    {{ crate::assets::DistVite::get_html_tags_for_asset::<crate::assets::Dist>("js/room.js") | safe }}
 </head>
 <body>
     <main class="room">
