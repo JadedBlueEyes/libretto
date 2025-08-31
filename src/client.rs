@@ -165,6 +165,21 @@ pub async fn sync_handler(
         .filter(|(_id, update)| update.prev_batch.is_some() || !update.events.is_empty())
         .collect();
 
+    let state_updates: Vec<_> = response
+        .rooms
+        .joined
+        .iter()
+        .map(|(id, update)| (id, update.state.clone()))
+        .chain(
+            response
+                .rooms
+                .left
+                .iter()
+                .map(|(id, update)| (id, update.state.clone())),
+        )
+        .filter(|(_id, update)| !update.is_empty())
+        .collect();
+
     for (room_id, update) in timeline_updates {
         if update.limited {
             warn!(
@@ -312,6 +327,114 @@ pub async fn sync_handler(
                     warn!(
                         error = %e,
                         "Failed to deserialize timeline event"
+                    );
+                }
+            }
+        }
+    }
+
+    // Process state updates (events that come through the state section, not timeline)
+    for (room_id, state_events) in state_updates {
+        for event in state_events {
+            match event.deserialize() {
+                Ok(event_de) => {
+                    let sender = event_de.sender();
+                    let timestamp = event_de.origin_server_ts();
+                    let event_id = event_de.event_id();
+                    let event_type = event_de.event_type();
+
+                    // Extract additional fields that may be present
+                    let transaction_id = event_de.transaction_id().map(|t| t.to_string());
+                    let unsigned = event
+                        .get_field::<serde_json::Value>("unsigned")
+                        .unwrap_or_default()
+                        .unwrap_or(serde_json::json!({}));
+                    let content = event
+                        .get_field::<serde_json::Value>("content")
+                        .unwrap_or_default()
+                        .unwrap_or(serde_json::json!({}));
+
+                    // Extract state_key for state events (should always be present here)
+                    let state_key = event.get_field::<String>("state_key").ok().flatten();
+                    let state_key_for_current_state = state_key.clone();
+
+                    // Insert event into database and get the rowid
+                    let event_rowid: i32 = sqlx::query_scalar(
+                        r#"
+                        INSERT INTO event (
+                            user_id, room_id, event_id, sender, timestamp,
+                            transaction_id, unsigned, content, event_type,
+                            state_key
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        ON CONFLICT (room_id, user_id, event_id) DO UPDATE SET
+                            timestamp = EXCLUDED.timestamp
+                        RETURNING rowid
+                        "#,
+                    )
+                    .bind(user_id.to_string())
+                    .bind(room_id.to_string())
+                    .bind(event_id.to_string())
+                    .bind(sender.to_string())
+                    .bind({
+                        let timestamp_u64: u64 = timestamp.get().into();
+                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
+                    })
+                    .bind(transaction_id)
+                    .bind(&unsigned)
+                    .bind(&content)
+                    .bind(event_type.to_string())
+                    .bind(state_key)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+                    // Extract and store media references
+                    let mxc_uris = extract_mxc_uris(&content);
+                    for mxc_uri in mxc_uris {
+                        // Insert media if it doesn't exist
+                        sqlx::query(
+                            r#"INSERT INTO media (mxc) VALUES ($1) ON CONFLICT (mxc) DO NOTHING"#,
+                        )
+                        .bind(&mxc_uri)
+                        .execute(&mut *tx)
+                        .await?;
+
+                        // Insert media reference
+                        sqlx::query(
+                            r#"
+                            INSERT INTO media_reference (event_rowid, media_mxc)
+                            VALUES ($1, $2)
+                            ON CONFLICT (event_rowid, media_mxc) DO NOTHING
+                            "#,
+                        )
+                        .bind(event_rowid)
+                        .bind(&mxc_uri)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+
+                    // Update current_state table (state events should always have a state_key)
+                    if let Some(state_key_value) = &state_key_for_current_state {
+                        sqlx::query(
+                            r#"
+                            INSERT INTO current_state (user_id, room_id, event_type, state_key, event_rowid)
+                            VALUES ($1, $2, $3, $4, $5)
+                            ON CONFLICT (room_id, user_id, event_type, state_key)
+                            DO UPDATE SET event_rowid = EXCLUDED.event_rowid
+                            "#,
+                        )
+                        .bind(user_id.to_string())
+                        .bind(room_id.to_string())
+                        .bind(event_type.to_string())
+                        .bind(state_key_value)
+                        .bind(event_rowid)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        "Failed to deserialize state event"
                     );
                 }
             }
