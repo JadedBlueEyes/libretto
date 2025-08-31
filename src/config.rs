@@ -1,5 +1,5 @@
 use crate::account::config::AccountDetails;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 // mod account;
@@ -24,6 +24,33 @@ pub struct CommandConfig {
 
     #[clap(flatten)]
     pub(crate) verbose: clap_verbosity_flag::Verbosity,
+
+    #[clap(subcommand)]
+    pub command: Option<Command>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Management utilities
+    #[clap(subcommand)]
+    Util(UtilCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum UtilCommand {
+    /// Remove the `next_batch` token from one or all accounts.
+    /// This will force an initial sync.
+    RemoveNextBatch {
+        /// The user ID of the account to target. If not provided, all accounts will be targeted.
+        #[arg(long)]
+        user_id: Option<String>,
+    },
+    /// Delete the `prev_batch` from all rooms and delete all timelines.
+    DeletePrevBatchAndTimelines {
+        /// The user ID of the account to target. If not provided, all accounts will be targeted.
+        #[arg(long)]
+        user_id: Option<String>,
+    },
 }
 
 use serde::{Deserialize, Serialize};

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE account SET next_batch = NULL WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec317724a33eed8ec6cff016f2abf4eba1e7ad7cb199625b7e6e4a962ee6c152"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE room SET prev_batch = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c59ba5fae0406bdf1fa8b73fdf3f08e47958b06c849e970720e32e7467b05eca"
+}

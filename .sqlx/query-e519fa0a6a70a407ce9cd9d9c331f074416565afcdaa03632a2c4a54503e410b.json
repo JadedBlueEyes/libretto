@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE room SET prev_batch = NULL WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e519fa0a6a70a407ce9cd9d9c331f074416565afcdaa03632a2c4a54503e410b"
+}
