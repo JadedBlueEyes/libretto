@@ -494,50 +494,59 @@ pub async fn run_sync_tasks(
     data_dir: &std::path::Path,
     cache_dir: &std::path::Path,
 ) -> eyre::Result<()> {
-    // Load config file
-    let config_file: ConfigFile = Config::builder()
-        .add_source(File::from(config_file))
-        .build()
-        .context("Failed to load config file")?
-        .try_deserialize()
-        .context("Failed to deserialize config file")?;
+    loop {
+        // Load config file
+        let config_file: ConfigFile = Config::builder()
+            .add_source(File::from(config_file.clone()))
+            .build()
+            .context("Failed to load config file")?
+            .try_deserialize()
+            .context("Failed to deserialize config file")?;
 
-    // Process sessions according to configuration
-    let client_sessions =
-        crate::session::process_sessions(db, &config_file, data_dir, cache_dir).await?;
+        // Process sessions according to configuration
+        let client_sessions =
+            crate::session::process_sessions(db, &config_file, data_dir, cache_dir).await?;
 
-    let primary_account = crate::account::selection::select_primary_account(
-        &config_file.accounts,
-        config_file.primary_user_id.as_deref(),
-    )?;
-    let primary_client = client_sessions
-        .iter()
-        .find(|cs| cs.account_config.user_id == primary_account.user_id)
-        .map(|cs| cs.client.clone())
-        .ok_or_else(|| {
-            eyre::eyre!(
-                "No client found for primary account: {}",
-                primary_account.user_id
-            )
-        })?;
-    let _ = server::CLIENT.set(RwLock::new(primary_client));
+        let primary_account = crate::account::selection::select_primary_account(
+            &config_file.accounts,
+            config_file.primary_user_id.as_deref(),
+        )?;
+        let primary_client = client_sessions
+            .iter()
+            .find(|cs| cs.account_config.user_id == primary_account.user_id)
+            .map(|cs| cs.client.clone())
+            .ok_or_else(|| {
+                eyre::eyre!(
+                    "No client found for primary account: {}",
+                    primary_account.user_id
+                )
+            })?;
+        let _ = server::CLIENT.set(RwLock::new(primary_client));
 
-    if client_sessions.is_empty() {
-        warn!("No clients available for sync tasks");
-        return Ok(());
+        if client_sessions.is_empty() {
+            warn!("No clients available for sync tasks");
+            return Ok(());
+        }
+
+        // Spawn sync tasks for all clients
+        let sync_tasks: Vec<_> = client_sessions
+            .into_iter()
+            .map(|client_session| spawn_sync_task(client_session, db.clone(), data_dir, cache_dir))
+            .collect();
+
+        info!(sync_task_count = sync_tasks.len(), "Starting sync tasks");
+
+        // Wait for all sync tasks to complete
+        let result = join_all(sync_tasks).await;
+        debug!("All sync tasks finished");
+
+        if result.iter().all(|r| r.is_err()) {
+            error!("Sync tasks failed, restarting");
+        } else {
+            info!("Sync tasks completed successfully");
+            break;
+        }
     }
-
-    // Spawn sync tasks for all clients
-    let sync_tasks: Vec<_> = client_sessions
-        .into_iter()
-        .map(|client_session| spawn_sync_task(client_session, db.clone(), data_dir, cache_dir))
-        .collect();
-
-    info!(sync_task_count = sync_tasks.len(), "Starting sync tasks");
-
-    // Wait for all sync tasks to complete
-    let _result = join_all(sync_tasks).await;
-    debug!("All sync tasks finished");
 
     Ok(())
 }
