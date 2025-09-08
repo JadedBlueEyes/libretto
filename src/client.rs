@@ -541,9 +541,9 @@ pub async fn run_sync_tasks(
         debug!("All sync tasks finished");
 
         if result.iter().all(|r| r.is_err()) {
-            error!("Sync tasks failed, restarting");
+            error!(results = ?result, "Sync tasks failed, restarting");
         } else {
-            info!("Sync tasks completed successfully");
+            info!(results = ?result, "Sync tasks completed successfully");
             break;
         }
     }
@@ -557,7 +557,7 @@ fn spawn_sync_task(
     db: DatabasePool,
     data_dir: &std::path::Path,
     cache_dir: &std::path::Path,
-) -> tokio::task::JoinHandle<()> {
+) -> tokio::task::JoinHandle<Result<(), crate::eyre::Report>> {
     let data_dir = data_dir.to_owned();
     let cache_dir = cache_dir.to_owned();
     tokio::spawn(async move {
@@ -602,13 +602,13 @@ fn spawn_sync_task(
                             account_config: client_session.account_config,
                         };
                     }
-                    Err(_) => {
+                    Err(se) => {
                         error!(
                             user_id = %user_id_string,
-                            error = %e,
+                            error = %se,
                             "Failed to restore session"
                         );
-                        break;
+                        return Err(e);
                     }
                 };
             } else {
@@ -620,6 +620,7 @@ fn spawn_sync_task(
             user_id = %user_id_string,
             "Sync task finished"
         );
+        Ok(())
     })
 }
 
