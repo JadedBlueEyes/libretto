@@ -537,7 +537,14 @@ pub async fn run_sync_tasks(
         info!(sync_task_count = sync_tasks.len(), "Starting sync tasks");
 
         // Wait for all sync tasks to complete
-        let result = join_all(sync_tasks).await;
+        let result = join_all(sync_tasks)
+            .await
+            .into_iter()
+            .map(|i| match i {
+                Ok(i) => i,
+                Err(e) => Err(eyre::eyre!("Sync task error: {e}")),
+            })
+            .collect::<Vec<_>>();
         debug!("All sync tasks finished");
 
         if result.iter().all(|r| r.is_err()) {
