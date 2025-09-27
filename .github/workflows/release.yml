@@ -127,6 +127,12 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      - name: "Set up pnpm"
+        uses: "pnpm/action-setup@v4"
+      - name: "Install npm dependencies"
+        run: "pnpm i --frozen-lockfile"
+      - name: "Build JS project"
+        run: "pnpm run build"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
