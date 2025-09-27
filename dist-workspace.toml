@@ -23,3 +23,8 @@ publish-jobs = ["homebrew"]
 install-updater = true
 
 github-build-setup = "dist-ci/build-setup.yml"
+
+features = ["bundled"]
+
+[dist.dependencies.chocolatey]
+sqlite = { version = '3.50.4', targets = ["aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc"] }

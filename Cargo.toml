@@ -60,8 +60,7 @@ tempfile = "3.8.1"
 
 [features]
 
-# "matrix-sdk/bundled-sqlite",
-bundled = ["reqwest/native-tls-vendored"] # jiff timezone database?
+bundled = ["reqwest/native-tls-vendored", "matrix-sdk/bundled-sqlite"] # jiff timezone database?
 
 [lints.rust]
 # still refactoring
