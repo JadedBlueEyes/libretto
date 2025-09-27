@@ -2,6 +2,9 @@
 name = "libretto"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/JadedBlueEyes/libretto"
+description = "The Matrix Archiver"
+homepage = "https://github.com/JadedBlueEyes/libretto?tab=readme-ov-file"
 
 [dependencies]
 askama = { version = "0.14.0", features = ["serde_json"] }
@@ -63,3 +66,8 @@ bundled = ["reqwest/native-tls-vendored"] # jiff timezone database?
 [lints.rust]
 # still refactoring
 dead_code = "allow"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
