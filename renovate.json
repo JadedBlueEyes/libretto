@@ -14,35 +14,51 @@
     "pre-commit": {
         "enabled": true
     },
-    "labels": ["Dependencies", "Dependencies/Renovate"],
+    "labels": [
+        "Dependencies",
+        "Dependencies/Renovate"
+    ],
     "github-actions": {
         "enabled": true
     },
     "packageRules": [
         {
             "description": "Disable updating dist workflow",
-
-            "matchFiles": [".github/workflows/release.yml"],
+            "matchFileNames": [
+                ".github/workflows/release.yml"
+            ],
             "enabled": false
         },
         {
             "description": "Limit concurrent Cargo PRs",
-            "matchManagers": ["cargo"],
+            "matchManagers": [
+                "cargo"
+            ],
             "prConcurrentLimit": 5
         },
         {
             "description": "Group Rust toolchain updates into a single PR",
-            "matchManagers": ["custom.regex"],
-            "matchPackageNames": ["rust", "rustc", "cargo"],
+            "matchManagers": [
+                "custom.regex"
+            ],
+            "matchPackageNames": [
+                "rust",
+                "rustc",
+                "cargo"
+            ],
             "groupName": "rust-toolchain"
         },
         {
-            "matchUpdateTypes": ["minor"],
+            "matchUpdateTypes": [
+                "minor"
+            ],
             "matchCurrentVersion": "!/^0/",
             "automerge": true
         },
         {
-            "matchUpdateTypes": ["patch"],
+            "matchUpdateTypes": [
+                "patch"
+            ],
             "matchCurrentVersion": "!/^0.0/",
             "automerge": true
         }
