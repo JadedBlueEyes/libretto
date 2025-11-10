@@ -1,0 +1,55 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["config:recommended", "replacements:all", "security:minimumReleaseAgeNpm"],
+    "osvVulnerabilityAlerts": true,
+    "lockFileMaintenance": {
+        "enabled": true,
+        "schedule": ["at any time"]
+    },
+    "platformAutomerge": true,
+    "pre-commit": {
+        "enabled": true
+    },
+    "labels": ["Dependencies", "Dependencies/Renovate"],
+    "github-actions": {
+        "enabled": true
+    },
+    "packageRules": [
+        {
+            "description": "Disable updating dist workflow",
+
+            "matchFiles": [".github/workflows/release.yml"],
+            "enabled": false
+        },
+        {
+            "description": "Limit concurrent Cargo PRs",
+            "matchManagers": ["cargo"],
+            "prConcurrentLimit": 5
+        },
+        {
+            "description": "Group Rust toolchain updates into a single PR",
+            "matchManagers": ["custom.regex"],
+            "matchPackageNames": ["rust", "rustc", "cargo"],
+            "groupName": "rust-toolchain"
+        },
+        {
+            "description": "Batch minor and patch GitHub Actions updates",
+            "matchManagers": ["github-actions"],
+            "matchUpdateTypes": ["minor", "patch"],
+            "groupName": "github-actions-non-major"
+        }
+    ],
+    "customManagers": [
+       {
+         "customType": "regex",
+         "description": "Update _VERSION variables in Dockerfiles",
+         "managerFilePatterns": [
+           "/(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$/",
+           "/(^|/|\\.)([Dd]ocker|[Cc]ontainer)file$/"
+         ],
+         "matchStrings": [
+           "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+?) depName=(?<depName>[^\\s]+?)(?: (lookupName|packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s+(?:ENV\\s+|ARG\\s+)?[A-Za-z0-9_]+?_VERSION[ =][\"']?(?<currentValue>.+?)[\"']?\\s+(?:(?:ENV\\s+|ARG\\s+)?[A-Za-z0-9_]+?_CHECKSUM[ =][\"']?(?<currentDigest>.+?)[\"']?\\s)?"
+         ]
+       }
+    ]
+}
