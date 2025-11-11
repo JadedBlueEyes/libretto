@@ -3,8 +3,8 @@ use config::{Config, File};
 use futures::TryFutureExt;
 use futures::future::join_all;
 use matrix_sdk::{Client, config::SyncSettings, sync::SyncResponse};
-use ruma::UserId;
 use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
+use ruma::{OwnedRoomId, UserId};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
@@ -126,11 +126,11 @@ pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Resu
     Ok(())
 }
 
-pub async fn sync_handler(
+pub async fn sync_handler<'a>(
     tx: &mut DatabaseConnection,
     client: &matrix_sdk::Client,
     user_id: &UserId,
-    response: &SyncResponse,
+    response: &'a SyncResponse,
 ) -> eyre::Result<()> {
     let updated_rooms = response
         .rooms
@@ -165,19 +165,36 @@ pub async fn sync_handler(
         .filter(|(_id, update)| update.prev_batch.is_some() || !update.events.is_empty())
         .collect();
 
+    let extract_state = |id: &'a OwnedRoomId,
+                         state: &'a matrix_sdk::sync::State|
+     -> Option<(&'a OwnedRoomId, &'a Vec<_>, bool)> {
+        match state {
+            matrix_sdk::sync::State::Before(events) => {
+                // Always return Some for Before, even if empty, because we need to process timeline state events
+                Some((id, events, true)) // true = process timeline state events too
+            }
+            matrix_sdk::sync::State::After(events) => {
+                if events.is_empty() {
+                    None
+                } else {
+                    Some((id, events, false)) // false = don't process timeline state events
+                }
+            }
+        }
+    };
+
     let state_updates: Vec<_> = response
         .rooms
         .joined
         .iter()
-        .map(|(id, update)| (id, update.state.clone()))
+        .filter_map(|(id, update)| extract_state(id, &update.state))
         .chain(
             response
                 .rooms
                 .left
                 .iter()
-                .map(|(id, update)| (id, update.state.clone())),
+                .filter_map(|(id, update)| extract_state(id, &update.state)),
         )
-        .filter(|(_id, update)| !update.is_empty())
         .collect();
 
     for (room_id, update) in timeline_updates {
@@ -322,6 +339,9 @@ pub async fn sync_handler(
                     .bind(event_rowid)
                     .execute(&mut *tx)
                     .await?;
+
+                    // Note: We'll handle current_state updates in the state_updates loop
+                    // to properly respect Before/After semantics
                 }
                 Err(e) => {
                     warn!(
@@ -334,7 +354,9 @@ pub async fn sync_handler(
     }
 
     // Process state updates (events that come through the state section, not timeline)
-    for (room_id, state_events) in state_updates {
+    // The process_timeline_state flag tells us whether to also look for state events in timeline
+    for (room_id, state_events, process_timeline_state) in state_updates {
+        // First, process the explicit state events
         for event in state_events {
             match event.deserialize() {
                 Ok(event_de) => {
@@ -436,6 +458,74 @@ pub async fn sync_handler(
                         error = %e,
                         "Failed to deserialize state event"
                     );
+                }
+            }
+        }
+
+        // If we have State::Before, we also need to process state events from the timeline
+        // to get the complete state. This might be wrong, but it's the best we can do as long as the server doesn't provide the state after.
+        // https://github.com/matrix-org/matrix-spec-proposals/pull/4222
+        if process_timeline_state {
+            // Find the timeline update for this room
+            if let Some(timeline_update) = response
+                .rooms
+                .joined
+                .get(room_id)
+                .map(|u| &u.timeline)
+                .or_else(|| response.rooms.left.get(room_id).map(|u| &u.timeline))
+            {
+                for timeline_event in &timeline_update.events {
+                    // Only process state events (those with a state_key)
+                    if let Ok(Some(state_key)) =
+                        timeline_event.raw().get_field::<String>("state_key")
+                    {
+                        match timeline_event.raw().deserialize() {
+                            Ok(event_de) => {
+                                let event_id = event_de.event_id();
+                                let event_type = event_de.event_type();
+
+                                // We should have already inserted this event in the timeline processing above,
+                                // so we just need to update current_state
+
+                                // Get the event_rowid from the database
+                                let event_rowid_result: Option<i32> = sqlx::query_scalar(
+                                    r#"SELECT rowid FROM event WHERE room_id = $1 AND user_id = $2 AND event_id = $3"#
+                                )
+                                .bind(room_id.to_string())
+                                .bind(user_id.to_string())
+                                .bind(event_id.to_string())
+                                .fetch_optional(&mut *tx)
+                                .await?;
+
+                                if let Some(event_rowid) = event_rowid_result {
+                                    // Update current_state with this state event from timeline
+                                    sqlx::query(
+                                        r#"
+                                        INSERT INTO current_state (user_id, room_id, event_type, state_key, event_rowid)
+                                        VALUES ($1, $2, $3, $4, $5)
+                                        ON CONFLICT (user_id, room_id, event_type, state_key) DO UPDATE SET
+                                            event_rowid = EXCLUDED.event_rowid
+                                        "#,
+                                    )
+                                    .bind(user_id.to_string())
+                                    .bind(room_id.to_string())
+                                    .bind(event_type.to_string())
+                                    .bind(&state_key)
+                                    .bind(event_rowid)
+                                    .execute(&mut *tx)
+                                    .await?;
+                                } else {
+                                    error!(event_id = %event_id, "Timeline state event was missing from events table")
+                                }
+                            }
+                            Err(e) => {
+                                warn!(
+                                    error = %e,
+                                    "Failed to deserialize state event from timeline"
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
