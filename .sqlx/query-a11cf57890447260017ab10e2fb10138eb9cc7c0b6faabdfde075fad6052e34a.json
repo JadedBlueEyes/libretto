@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media (mxc) VALUES ($1) ON CONFLICT (mxc) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a11cf57890447260017ab10e2fb10138eb9cc7c0b6faabdfde075fad6052e34a"
+}

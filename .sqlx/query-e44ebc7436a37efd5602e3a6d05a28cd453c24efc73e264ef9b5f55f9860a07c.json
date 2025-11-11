@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        INSERT INTO timeline (room_id, user_id, event_rowid)\n                        VALUES ($1, $2, $3)\n                        ON CONFLICT (event_rowid) DO NOTHING\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e44ebc7436a37efd5602e3a6d05a28cd453c24efc73e264ef9b5f55f9860a07c"
+}

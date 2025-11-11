@@ -1,0 +1,235 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                        event.rowid as \"rowid!\", timeline.rowid as \"timeline_rowid!\",\n                        event.room_id as \"room_id!\", event.event_id as \"event_id!\", event.sender as \"sender!\", event.event_type as \"event_type!\", event.state_key,\n                        event.timestamp as \"timestamp!\", event.content as \"raw_content!: Json<Box<serde_json::value::RawValue>>\",\n                        event.unsigned as \"raw_unsigned!: Json<Box<serde_json::value::RawValue>>\", event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,\n                        event.megolm_session_id, event.last_edit_rowid,\n                        edit_event.content as \"edit_content: Json<Box<serde_json::value::RawValue>>\",\n                        redaction_event.content as \"redaction_content: Json<Box<serde_json::value::RawValue>>\"\n                    FROM timeline\n                    JOIN event ON event.rowid = timeline.event_rowid\n                        AND event.room_id = timeline.room_id\n                        AND event.user_id = timeline.user_id\n                    LEFT JOIN event AS edit_event ON event.last_edit_rowid = edit_event.rowid\n                        AND event.room_id = edit_event.room_id\n                        AND event.user_id = edit_event.user_id\n                    LEFT JOIN event AS redaction_event ON event.redacted_by = redaction_event.event_id\n                        AND event.room_id = redaction_event.room_id\n                        AND event.user_id = redaction_event.user_id\n                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)\n                    ORDER BY timeline.rowid DESC\n                    LIMIT $4;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rowid!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "rowid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "timeline_rowid!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "timeline",
+            "name": "rowid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "room_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "room_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "event_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "sender!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "sender"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "event_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "state_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "state_key"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "timestamp!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "timestamp"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "raw_content!: Json<Box<serde_json::value::RawValue>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "raw_unsigned!: Json<Box<serde_json::value::RawValue>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "unsigned"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "transaction_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "transaction_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "redacted_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "redacted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "relates_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "relates_to"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "relation_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "relation_type"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "megolm_session_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "megolm_session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "last_edit_rowid",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "last_edit_rowid"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "edit_content: Json<Box<serde_json::value::RawValue>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "redaction_content: Json<Box<serde_json::value::RawValue>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "event",
+            "name": "content"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "dd0ec1427cdb9258c95832faabcc5ede59e5a966352b681ac66a800dee476172"
+}

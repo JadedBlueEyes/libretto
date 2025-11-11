@@ -270,7 +270,12 @@ pub async fn sync_handler<'a>(
                     let state_key = event.raw().get_field::<String>("state_key").ok().flatten();
 
                     // Insert event into database and get the rowid
-                    let event_rowid: i32 = sqlx::query_scalar(
+                    let timestamp_i64 = {
+                        let timestamp_u64: u64 = timestamp.get().into();
+                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
+                    };
+
+                    let event_rowid = sqlx::query_scalar!(
                         r#"
                         INSERT INTO event (
                             user_id, room_id, event_id, sender, timestamp,
@@ -281,23 +286,20 @@ pub async fn sync_handler<'a>(
                             timestamp = EXCLUDED.timestamp
                         RETURNING rowid
                         "#,
+                        user_id.as_str(),
+                        room_id.as_str(),
+                        event_id.as_str(),
+                        sender.as_str(),
+                        timestamp_i64,
+                        transaction_id,
+                        unsigned,
+                        content,
+                        event_type.to_string(),
+                        relates_to,
+                        relation_type,
+                        state_key,
+                        megolm_session_id
                     )
-                    .bind(user_id.to_string())
-                    .bind(room_id.to_string())
-                    .bind(event_id.to_string())
-                    .bind(sender.to_string())
-                    .bind({
-                        let timestamp_u64: u64 = timestamp.get().into();
-                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
-                    })
-                    .bind(transaction_id)
-                    .bind(&unsigned)
-                    .bind(&content)
-                    .bind(event_type.to_string())
-                    .bind(relates_to)
-                    .bind(relation_type)
-                    .bind(state_key)
-                    .bind(megolm_session_id)
                     .fetch_one(&mut *tx)
                     .await?;
 
@@ -305,38 +307,38 @@ pub async fn sync_handler<'a>(
                     let mxc_uris = extract_mxc_uris(&content);
                     for mxc_uri in mxc_uris {
                         // Insert media if it doesn't exist
-                        sqlx::query(
+                        sqlx::query!(
                             r#"INSERT INTO media (mxc) VALUES ($1) ON CONFLICT (mxc) DO NOTHING"#,
+                            mxc_uri
                         )
-                        .bind(&mxc_uri)
                         .execute(&mut *tx)
                         .await?;
 
                         // Insert media reference
-                        sqlx::query(
+                        sqlx::query!(
                             r#"
                             INSERT INTO media_reference (event_rowid, media_mxc)
                             VALUES ($1, $2)
                             ON CONFLICT (event_rowid, media_mxc) DO NOTHING
                             "#,
+                            event_rowid,
+                            mxc_uri
                         )
-                        .bind(event_rowid)
-                        .bind(&mxc_uri)
                         .execute(&mut *tx)
                         .await?;
                     }
 
                     // Insert into timeline
-                    sqlx::query(
+                    sqlx::query!(
                         r#"
                         INSERT INTO timeline (room_id, user_id, event_rowid)
                         VALUES ($1, $2, $3)
                         ON CONFLICT (event_rowid) DO NOTHING
                         "#,
+                        room_id.as_str(),
+                        user_id.as_str(),
+                        event_rowid
                     )
-                    .bind(room_id.to_string())
-                    .bind(user_id.to_string())
-                    .bind(event_rowid)
                     .execute(&mut *tx)
                     .await?;
 
@@ -381,7 +383,12 @@ pub async fn sync_handler<'a>(
                     let state_key_for_current_state = state_key.clone();
 
                     // Insert event into database and get the rowid
-                    let event_rowid: i32 = sqlx::query_scalar(
+                    let timestamp_i64 = {
+                        let timestamp_u64: u64 = timestamp.get().into();
+                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
+                    };
+
+                    let event_rowid = sqlx::query_scalar!(
                         r#"
                         INSERT INTO event (
                             user_id, room_id, event_id, sender, timestamp,
@@ -392,20 +399,17 @@ pub async fn sync_handler<'a>(
                             timestamp = EXCLUDED.timestamp
                         RETURNING rowid
                         "#,
+                        user_id.as_str(),
+                        room_id.as_str(),
+                        event_id.as_str(),
+                        sender.as_str(),
+                        timestamp_i64,
+                        transaction_id,
+                        unsigned,
+                        content,
+                        event_type.to_string(),
+                        state_key
                     )
-                    .bind(user_id.to_string())
-                    .bind(room_id.to_string())
-                    .bind(event_id.to_string())
-                    .bind(sender.to_string())
-                    .bind({
-                        let timestamp_u64: u64 = timestamp.get().into();
-                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
-                    })
-                    .bind(transaction_id)
-                    .bind(&unsigned)
-                    .bind(&content)
-                    .bind(event_type.to_string())
-                    .bind(state_key)
                     .fetch_one(&mut *tx)
                     .await?;
 
@@ -413,42 +417,42 @@ pub async fn sync_handler<'a>(
                     let mxc_uris = extract_mxc_uris(&content);
                     for mxc_uri in mxc_uris {
                         // Insert media if it doesn't exist
-                        sqlx::query(
+                        sqlx::query!(
                             r#"INSERT INTO media (mxc) VALUES ($1) ON CONFLICT (mxc) DO NOTHING"#,
+                            mxc_uri
                         )
-                        .bind(&mxc_uri)
                         .execute(&mut *tx)
                         .await?;
 
                         // Insert media reference
-                        sqlx::query(
+                        sqlx::query!(
                             r#"
                             INSERT INTO media_reference (event_rowid, media_mxc)
                             VALUES ($1, $2)
                             ON CONFLICT (event_rowid, media_mxc) DO NOTHING
                             "#,
+                            event_rowid,
+                            mxc_uri
                         )
-                        .bind(event_rowid)
-                        .bind(&mxc_uri)
                         .execute(&mut *tx)
                         .await?;
                     }
 
                     // Update current_state table (state events should always have a state_key)
                     if let Some(state_key_value) = &state_key_for_current_state {
-                        sqlx::query(
+                        sqlx::query!(
                             r#"
                             INSERT INTO current_state (user_id, room_id, event_type, state_key, event_rowid)
                             VALUES ($1, $2, $3, $4, $5)
                             ON CONFLICT (room_id, user_id, event_type, state_key)
                             DO UPDATE SET event_rowid = EXCLUDED.event_rowid
                             "#,
+                            user_id.as_str(),
+                            room_id.as_str(),
+                            event_type.to_string(),
+                            state_key_value,
+                            event_rowid
                         )
-                        .bind(user_id.to_string())
-                        .bind(room_id.to_string())
-                        .bind(event_type.to_string())
-                        .bind(state_key_value)
-                        .bind(event_rowid)
                         .execute(&mut *tx)
                         .await?;
                     }
@@ -488,30 +492,30 @@ pub async fn sync_handler<'a>(
                                 // so we just need to update current_state
 
                                 // Get the event_rowid from the database
-                                let event_rowid_result: Option<i32> = sqlx::query_scalar(
-                                    r#"SELECT rowid FROM event WHERE room_id = $1 AND user_id = $2 AND event_id = $3"#
+                                let event_rowid_result = sqlx::query_scalar!(
+                                    r#"SELECT rowid FROM event WHERE room_id = $1 AND user_id = $2 AND event_id = $3"#,
+                                    room_id.as_str(),
+                                    user_id.as_str(),
+                                    event_id.as_str()
                                 )
-                                .bind(room_id.to_string())
-                                .bind(user_id.to_string())
-                                .bind(event_id.to_string())
                                 .fetch_optional(&mut *tx)
                                 .await?;
 
                                 if let Some(event_rowid) = event_rowid_result {
                                     // Update current_state with this state event from timeline
-                                    sqlx::query(
+                                    sqlx::query!(
                                         r#"
                                         INSERT INTO current_state (user_id, room_id, event_type, state_key, event_rowid)
                                         VALUES ($1, $2, $3, $4, $5)
                                         ON CONFLICT (user_id, room_id, event_type, state_key) DO UPDATE SET
                                             event_rowid = EXCLUDED.event_rowid
                                         "#,
+                                        user_id.as_str(),
+                                        room_id.as_str(),
+                                        event_type.to_string(),
+                                        state_key,
+                                        event_rowid
                                     )
-                                    .bind(user_id.to_string())
-                                    .bind(room_id.to_string())
-                                    .bind(event_type.to_string())
-                                    .bind(&state_key)
-                                    .bind(event_rowid)
                                     .execute(&mut *tx)
                                     .await?;
                                 } else {

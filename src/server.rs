@@ -26,7 +26,7 @@ use crate::{
     timeline::{DbTimelineEvent, build_timeline_event_from_db},
 };
 use askama::Template;
-use sqlx::Row;
+use sqlx::types::Json;
 
 #[derive(Clone, extract::FromRef)]
 struct AppState {
@@ -132,15 +132,16 @@ pub async fn room_internal(
     let limit = 250;
 
     // Fetch timeline events from the database (fetch limit+1 to check for next page)
-    let mut rows: Vec<DbTimelineEvent> = sqlx::query_as(
+    let mut rows = sqlx::query_as!(
+                    DbTimelineEvent,
                     r#"SELECT
-                        event.rowid, timeline.rowid as timeline_rowid,
-                        event.room_id, event.event_id, event.sender, event.event_type, event.state_key,
-                        event.timestamp, event.content::jsonb,
-                        event.unsigned::jsonb, event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,
+                        event.rowid as "rowid!", timeline.rowid as "timeline_rowid!",
+                        event.room_id as "room_id!", event.event_id as "event_id!", event.sender as "sender!", event.event_type as "event_type!", event.state_key,
+                        event.timestamp as "timestamp!", event.content as "raw_content!: Json<Box<serde_json::value::RawValue>>",
+                        event.unsigned as "raw_unsigned!: Json<Box<serde_json::value::RawValue>>", event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,
                         event.megolm_session_id, event.last_edit_rowid,
-                        edit_event.content::jsonb as edit_content,
-                        redaction_event.content::jsonb as redaction_content
+                        edit_event.content as "edit_content: Json<Box<serde_json::value::RawValue>>",
+                        redaction_event.content as "redaction_content: Json<Box<serde_json::value::RawValue>>"
                     FROM timeline
                     JOIN event ON event.rowid = timeline.event_rowid
                         AND event.room_id = timeline.room_id
@@ -154,11 +155,11 @@ pub async fn room_internal(
                     WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)
                     ORDER BY timeline.rowid DESC
                     LIMIT $4;"#,
+                    user_id.as_str(),
+                    room_id.as_str(),
+                    last_rowid.unwrap_or(0),
+                    (limit + 1) as i64
                 )
-                .bind(user_id.as_str())
-                .bind(room_id.as_str())
-                .bind(last_rowid.unwrap_or(0))
-                .bind((limit + 1) as i32)
                 .fetch_all(&db)
                 .await?;
 
@@ -179,7 +180,7 @@ pub async fn room_internal(
     if let Some(last_rowid) = last_rowid
         && last_rowid != 0
     {
-        let row = sqlx::query(
+        let row = sqlx::query!(
             r#"SELECT COALESCE(
                     (
                         SELECT timeline.rowid as timeline_rowid
@@ -193,17 +194,17 @@ pub async fn room_internal(
                         FROM timeline
                         WHERE timeline.user_id = $1 AND timeline.room_id = $2
                     )
-                ) as timeline_rowid;"#,
+                ) as timeline_rowid"#,
+            user_id.as_str(),
+            room_id.as_str(),
+            last_rowid,
+            limit as i64
         )
-        .bind(user_id.as_str())
-        .bind(room_id.as_str())
-        .bind(last_rowid)
-        .bind(limit as i32)
         .fetch_one(&db)
         .await
         .ok();
 
-        if let Some(timeline_rowid) = row.map(|r| r.get::<i32, &str>("timeline_rowid"))
+        if let Some(timeline_rowid) = row.and_then(|r| r.timeline_rowid)
             && timeline_rowid != last_rowid
         {
             next_page = Some(format!("/room/{room_id}/{timeline_rowid}"));
@@ -222,18 +223,20 @@ pub async fn room_internal(
 
     if !senders.is_empty() {
         let sender_list: Vec<String> = senders.into_iter().collect();
-        let profile_rows = sqlx::query(
-            r#"SELECT cs.state_key as user_id, e.content::jsonb as content
+        let room_id_str = room_id.as_str();
+        let user_id_str = user_id.as_str();
+        let profile_rows = sqlx::query!(
+            r#"SELECT cs.state_key as "user_id!", e.content as "content!: Json<serde_json::Value>"
                FROM current_state cs
                JOIN event e ON cs.event_rowid = e.rowid
                WHERE cs.room_id = $1
                  AND cs.user_id = $2
                  AND cs.event_type = 'm.room.member'
                  AND cs.state_key = ANY($3)"#,
+            room_id_str,
+            user_id_str,
+            &sender_list
         )
-        .bind(room_id.as_str())
-        .bind(user_id.as_str())
-        .bind(&sender_list)
         .fetch_all(&db)
         .await?;
 
@@ -244,8 +247,8 @@ pub async fn room_internal(
             std::collections::HashMap::new();
 
         for profile_row in &profile_rows {
-            let sender_id: String = profile_row.get("user_id");
-            let content: serde_json::Value = profile_row.get("content");
+            let sender_id = profile_row.user_id.clone();
+            let content = &profile_row.content.0;
 
             let display_name = content
                 .get("displayname")
@@ -261,8 +264,8 @@ pub async fn room_internal(
 
         // Second pass: create profiles with ambiguity information
         for profile_row in profile_rows {
-            let sender_id: String = profile_row.get("user_id");
-            let content: serde_json::Value = profile_row.get("content");
+            let sender_id = profile_row.user_id.clone();
+            let content = &profile_row.content.0;
 
             let display_name = content
                 .get("displayname")

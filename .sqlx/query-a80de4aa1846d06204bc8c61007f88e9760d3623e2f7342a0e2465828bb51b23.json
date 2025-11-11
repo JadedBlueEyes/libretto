@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(\n                    (\n                        SELECT timeline.rowid as timeline_rowid\n                        FROM timeline\n                        WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND timeline.rowid >= $3\n                        ORDER BY timeline.rowid ASC\n                        OFFSET $4 LIMIT 1\n                    ),\n                    (\n                        SELECT MAX(timeline.rowid) as timeline_rowid\n                        FROM timeline\n                        WHERE timeline.user_id = $1 AND timeline.room_id = $2\n                    )\n                ) as timeline_rowid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timeline_rowid",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a80de4aa1846d06204bc8c61007f88e9760d3623e2f7342a0e2465828bb51b23"
+}
