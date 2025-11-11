@@ -5,6 +5,7 @@ edition = "2024"
 repository = "https://github.com/JadedBlueEyes/libretto"
 description = "The Matrix Archiver"
 homepage = "https://github.com/JadedBlueEyes/libretto?tab=readme-ov-file"
+license = "MPL-2.0"
 
 [dependencies]
 askama = { version = "0.14.0", features = ["serde_json"] }
@@ -65,6 +66,41 @@ bundled = ["reqwest/native-tls-vendored", "matrix-sdk/bundled-sqlite"] # jiff ti
 [lints.rust]
 # still refactoring
 dead_code = "allow"
+
+[lints.clippy]
+
+all = { level = "warn", priority = -1 }
+# pedantic = { level = "warn", priority = -1 }
+# nursery = { level = "warn", priority = -1 }
+
+
+
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+
+# Casts are bad
+cast_possible_wrap = "warn"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cast_precision_loss = "warn"
+
+
+# Performance lints
+redundant_closure_for_method_calls = "warn"
+redundant_clone = "warn"
+or_fun_call = "warn"
+map_unwrap_or = "warn"
+unused_async = "warn"
+trivially_copy_pass_by_ref = "warn"
+
+# Style lints for code consistency
+needless_return = "warn"
+use_self = "warn"
+explicit_iter_loop = "warn"
+
+# Correctness lints
+cast_lossless = "warn"
+missing_const_for_fn = "warn"
 
 # The profile that 'dist' will build with
 [profile.dist]

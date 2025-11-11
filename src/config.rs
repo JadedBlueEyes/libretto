@@ -59,7 +59,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ConfigFile {
     /// Primary user ID to use. If unset, uses the first account.
-    /// If set, must match an account's user_id (raw string or parsed form).
+    /// If set, must match an account's `user_id` (raw string or parsed form).
     pub primary_user_id: Option<String>,
     /// List of accounts to be managed by the application
     pub accounts: Vec<AccountDetails>,

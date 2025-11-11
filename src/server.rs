@@ -45,7 +45,7 @@ pub fn build_router(db: DatabasePool) -> Router {
         .with_state(AppState { db })
 }
 
-pub(crate) static CLIENT: OnceLock<RwLock<Client>> = OnceLock::new();
+pub static CLIENT: OnceLock<RwLock<Client>> = OnceLock::new();
 fn primary_client() -> Result<&'static RwLock<Client>, eyre::Error> {
     CLIENT.get().context("Clients are not initialised")
 }
@@ -158,7 +158,7 @@ pub async fn room_internal(
                     user_id.as_str(),
                     room_id.as_str(),
                     last_rowid.unwrap_or(0),
-                    (limit + 1) as i64
+                    i64::try_from(limit + 1).unwrap_or(i64::MAX)
                 )
                 .fetch_all(&db)
                 .await?;
@@ -198,7 +198,7 @@ pub async fn room_internal(
             user_id.as_str(),
             room_id.as_str(),
             last_rowid,
-            limit as i64
+            i64::try_from(limit).unwrap_or(i64::MAX)
         )
         .fetch_one(&db)
         .await
@@ -253,7 +253,7 @@ pub async fn room_internal(
             let display_name = content
                 .get("displayname")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
 
             user_display_names.insert(sender_id, display_name.clone());
 
@@ -270,7 +270,7 @@ pub async fn room_internal(
             let display_name = content
                 .get("displayname")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
 
             let avatar_url = content
                 .get("avatar_url")
@@ -280,8 +280,7 @@ pub async fn room_internal(
             // Check if display name is ambiguous (used by multiple users)
             let display_name_ambiguous = display_name
                 .as_ref()
-                .map(|name| display_name_counts.get(name).unwrap_or(&0) > &1)
-                .unwrap_or(false);
+                .is_some_and(|name| display_name_counts.get(name).unwrap_or(&0) > &1);
 
             sender_profiles.insert(
                 sender_id,
@@ -315,7 +314,7 @@ pub async fn room_internal(
                 {
                     next.same_sender = true;
                 }
-            };
+            }
             timeline.push(event);
         }
     }
@@ -326,8 +325,7 @@ pub async fn room_internal(
         name: room
             .display_name()
             .await
-            .map(|name| name.to_string())
-            .unwrap_or("Unknown Room".to_owned()),
+            .map_or_else(|_| "Unknown Room".to_owned(), |name| name.to_string()),
         room_id: &room_id,
         hit_end_of_timeline,
         room: &room,
@@ -396,8 +394,8 @@ pub async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        () = ctrl_c => {},
+        () = terminate => {},
     }
 }
 

@@ -1,3 +1,5 @@
+use std::convert::Into;
+
 use color_eyre::eyre::{self, Context};
 // filepath: /Users/jade/Code/libretto/src/room_list.rs
 use matrix_sdk::ruma::{OwnedRoomId, RoomId};
@@ -44,8 +46,7 @@ impl RoomListEntry {
         let name = self.name.to_string();
         name.chars()
             .next()
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| "?".to_string())
+            .map_or_else(|| "?".to_string(), |c| c.to_string())
     }
 
     /// Get initials from room name for avatar fallback
@@ -81,7 +82,7 @@ impl RoomListEntry {
         // Simple hash function to get consistent color assignment
         let mut hash: u32 = 0;
         for byte in self.id.as_str().bytes() {
-            hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+            hash = hash.wrapping_mul(31).wrapping_add(u32::from(byte));
         }
 
         // Map to one of 10 color classes
@@ -90,7 +91,7 @@ impl RoomListEntry {
     }
 
     /// Check if the room has unread messages
-    pub fn has_unread(&self) -> bool {
+    pub const fn has_unread(&self) -> bool {
         self.unread_count > 0
     }
 }
@@ -104,7 +105,7 @@ pub struct RoomList {
 
 impl RoomList {
     /// Create a new empty room list
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { rooms: Vec::new() }
     }
 
@@ -167,7 +168,7 @@ pub struct RoomDbEntry {
 }
 
 /// Enum keeping track of the membership of our user in a room.
-/// Differs from the matrix_sdk enum in that it includes the 'forgotten' state.
+/// Differs from the `matrix_sdk` enum in that it includes the 'forgotten' state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "room_membership_state", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
@@ -183,11 +184,11 @@ pub enum RoomState {
 impl From<matrix_sdk::RoomState> for RoomState {
     fn from(state: matrix_sdk::RoomState) -> Self {
         match state {
-            matrix_sdk::RoomState::Joined => RoomState::Joined,
-            matrix_sdk::RoomState::Left => RoomState::Left,
-            matrix_sdk::RoomState::Invited => RoomState::Invited,
-            matrix_sdk::RoomState::Knocked => RoomState::Knocked,
-            matrix_sdk::RoomState::Banned => RoomState::Banned,
+            matrix_sdk::RoomState::Joined => Self::Joined,
+            matrix_sdk::RoomState::Left => Self::Left,
+            matrix_sdk::RoomState::Invited => Self::Invited,
+            matrix_sdk::RoomState::Knocked => Self::Knocked,
+            matrix_sdk::RoomState::Banned => Self::Banned,
         }
     }
 }
@@ -204,7 +205,7 @@ impl TryFrom<OptionAliasDbParser> for Option<OwnedRoomAliasId> {
     }
 }
 
-/// Helper function to create a RoomListEntry from a matrix-sdk Room
+/// Helper function to create a `RoomListEntry` from a matrix-sdk `Room`
 pub async fn room_to_list_entry(room: &Room) -> Result<RoomListEntry, AppError> {
     let room_id = room.room_id().to_owned();
     let is_direct = room.is_direct().await?;
@@ -250,7 +251,7 @@ pub async fn update_rooms(
         .await?
         .into_iter()
         .filter(|room_id| rooms.iter().any(|room| room.room_id() == room_id))
-        .map(|room_id| room_id.into())
+        .map(Into::into)
         .collect::<Vec<String>>();
 
     sqlx::query!(
@@ -312,8 +313,8 @@ pub async fn update_rooms(
             room.create_content().map(|i| SqlxJson(i)) as _,
             room.tombstone_content().map(|i| SqlxJson(i)) as _,
             encryption,
-            counts.highlight_count as i32,
-            counts.notification_count as i32,
+            counts.highlight_count.try_into().unwrap_or(i32::MAX),
+            counts.notification_count.try_into().unwrap_or(i32::MAX),
             SqlxJson(room.display_name().await?) as _,
             room.avatar_url().map(|i| i.to_string()),
             room.topic(),

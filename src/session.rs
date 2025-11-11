@@ -324,7 +324,7 @@ pub async fn process_sessions(
         }
     }
 
-    for session in sessions.iter() {
+    for session in &sessions {
         if let Err(e) = setup_client(&session.client, &session.account_config).await {
             warn!(
                 user_id = %session.account_config.user_id,
@@ -363,7 +363,7 @@ fn match_sessions_to_config(
     for session in all_sessions {
         let matching_account_index = match_session_to_account(&session, &accounts_without_sessions);
         if let Some(index) = matching_account_index {
-            sessions_with_config.push((session, accounts_without_sessions.remove(index)))
+            sessions_with_config.push((session, accounts_without_sessions.remove(index)));
         } else {
             sessions_without_config.push(session);
         }
@@ -405,7 +405,7 @@ async fn login_accounts(
                 );
 
                 db.acquire()
-                    .map_err(|e| e.into())
+                    .map_err(std::convert::Into::into)
                     .and_then(async |mut tx| insert_account_session(&mut tx, &session).await)
                     .await?;
 
@@ -456,7 +456,7 @@ mod tests {
     fn create_test_account(user_id: &str, homeserver: Option<&str>) -> AccountDetails {
         AccountDetails {
             user_id: user_id.to_string(),
-            homeserver: homeserver.map(|s| s.to_string()),
+            homeserver: homeserver.map(std::string::ToString::to_string),
             auth_method: AuthMethod::None,
             recovery_key: None,
             enable_encryption: true,
@@ -474,7 +474,7 @@ mod tests {
         sync_token: Option<&str>,
     ) -> FullSession {
         FullSession {
-            sync_token: sync_token.map(|s| s.to_string()),
+            sync_token: sync_token.map(std::string::ToString::to_string),
             client_session: ClientSession {
                 homeserver: homeserver.to_string(),
                 db_path: format!("{device_id}_db"),
@@ -482,7 +482,7 @@ mod tests {
             },
             user_session: MatrixSession {
                 meta: SessionMeta {
-                    user_id: UserId::parse(user_id).unwrap().to_owned(),
+                    user_id: UserId::parse(user_id).unwrap(),
                     device_id: device_id.into(),
                 },
                 tokens: SessionTokens {

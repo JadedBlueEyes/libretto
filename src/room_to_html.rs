@@ -69,13 +69,15 @@ pub(crate) fn message_formatted_body(message: &MessageType) -> Option<&Formatted
     }
 }
 
-pub(crate) fn timestamp_to_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
+pub(crate) fn timestamp_to_string(ts: MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_string(ts.0.into())
 }
-pub(crate) fn timestamp_to_format_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
+
+pub(crate) fn timestamp_to_format_string(ts: MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_format_string(ts.0.into())
 }
-pub(crate) fn timestamp_to_short_format_string(ts: &MilliSecondsSinceUnixEpoch) -> String {
+
+pub(crate) fn timestamp_to_short_format_string(ts: MilliSecondsSinceUnixEpoch) -> String {
     milliseconds_since_unix_epoch_to_short_format_string(ts.0.into())
 }
 
@@ -282,7 +284,7 @@ pub(crate) fn get_avatar_color_class(id: &str) -> String {
     // Simple hash function to get consistent color assignment
     let mut hash: u32 = 0;
     for byte in id.bytes() {
-        hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+        hash = hash.wrapping_mul(31).wrapping_add(u32::from(byte));
     }
 
     // Map to one of 10 color classes

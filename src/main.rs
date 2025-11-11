@@ -74,7 +74,7 @@ async fn handle_util_command(cmd: &UtilCommand, db: &DatabasePool) -> eyre::Resu
     Ok(())
 }
 
-/// Remove next_batch tokens from accounts
+/// Remove `next_batch` tokens from accounts
 async fn remove_next_batch(db: &DatabasePool, user_id: Option<&str>) -> eyre::Result<()> {
     let affected_rows = if let Some(user_id) = user_id {
         info!("Removing next_batch for account: {}", user_id);
@@ -97,7 +97,7 @@ async fn remove_next_batch(db: &DatabasePool, user_id: Option<&str>) -> eyre::Re
     Ok(())
 }
 
-/// Delete prev_batch tokens and all timelines
+/// Delete `prev_batch` tokens and all timelines
 async fn delete_prev_batch_and_timelines(
     db: &DatabasePool,
     user_id: Option<&str>,

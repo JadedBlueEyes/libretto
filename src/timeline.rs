@@ -292,7 +292,7 @@ fn create_redacted_timeline_event(
     }
 }
 
-/// Build a TimelineEvent from a database row
+/// Build a `TimelineEvent` from a database row
 pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<TimelineEvent> {
     // Hide edit events
     if let Some(ref relation_type) = evt.relation_type {
@@ -446,6 +446,7 @@ async fn messagelike_to_content(
     messagelike_to_content_with_edit(msg_like, None).await
 }
 
+#[allow(clippy::unused_async)]
 async fn messagelike_to_content_with_edit(
     msg_like: AnyMessageLikeEventContent,
     edit_content: Option<RoomMessageEventContentWithoutRelation>,
@@ -463,8 +464,7 @@ async fn messagelike_to_content_with_edit(
 
             let final_edit = edit_content.or(inline_edit);
 
-            let message =
-                Message::from_event(room_message_event_content.msgtype.clone(), final_edit);
+            let message = Message::from_event(room_message_event_content.msgtype, final_edit);
 
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
                 kind: MsgLikeKind::Message(message),
@@ -503,7 +503,7 @@ async fn messagelike_to_content_with_edit(
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
                 kind: MsgLikeKind::Reaction(
                     reaction_content.relates_to.key.clone(),
-                    reaction_content.relates_to.event_id.clone(),
+                    reaction_content.relates_to.event_id,
                 ),
                 reactions: ReactionsByKeyBySender::default(),
                 in_reply_to: None,
@@ -579,7 +579,7 @@ async fn messagelike_to_content_with_edit(
         }
         AnyMessageLikeEventContent::CallNotify(call_notify_content) => {
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
-                kind: MsgLikeKind::CallNotify(call_notify_content.call_id.to_string()),
+                kind: MsgLikeKind::CallNotify(call_notify_content.call_id),
                 reactions: ReactionsByKeyBySender::default(),
                 in_reply_to: None,
                 thread_root: None,
@@ -602,21 +602,20 @@ async fn messagelike_to_content_with_edit(
                 ruma::events::poll::unstable_start::UnstablePollStartEventContent::Replacement(
                     replacement_poll,
                 ) => {
-                    let question = replacement_poll
-                        .poll_start
-                        .as_ref()
-                        .map(|ps| ps.question.text.clone())
-                        .unwrap_or_else(|| "Poll question unavailable".to_string());
-                    let answers = replacement_poll
-                        .poll_start
-                        .as_ref()
-                        .map(|ps| {
-                            ps.answers
-                                .iter()
-                                .map(|answer| (answer.id.clone(), answer.text.clone()))
-                                .collect()
-                        })
-                        .unwrap_or_else(Vec::new);
+                    let question = replacement_poll.poll_start.as_ref().map_or_else(
+                        || "Poll question unavailable".to_string(),
+                        |ps| ps.question.text.clone(),
+                    );
+                    let answers =
+                        replacement_poll
+                            .poll_start
+                            .as_ref()
+                            .map_or_else(Vec::new, |ps| {
+                                ps.answers
+                                    .iter()
+                                    .map(|answer| (answer.id.clone(), answer.text.clone()))
+                                    .collect()
+                            });
                     (question, answers)
                 }
                 _ => ("Unknown poll type".to_string(), Vec::new()),
@@ -630,7 +629,7 @@ async fn messagelike_to_content_with_edit(
         }
         AnyMessageLikeEventContent::UnstablePollResponse(poll_response_content) => {
             let answers = poll_response_content.poll_response.answers.clone();
-            let poll_event_id = poll_response_content.relates_to.event_id.clone();
+            let poll_event_id = poll_response_content.relates_to.event_id;
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
                 kind: MsgLikeKind::PollResponse(answers, poll_event_id),
                 reactions: ReactionsByKeyBySender::default(),
@@ -640,7 +639,7 @@ async fn messagelike_to_content_with_edit(
         }
         AnyMessageLikeEventContent::UnstablePollEnd(poll_end_content) => {
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
-                kind: MsgLikeKind::PollEnd(poll_end_content.text.clone()),
+                kind: MsgLikeKind::PollEnd(poll_end_content.text),
                 reactions: ReactionsByKeyBySender::default(),
                 in_reply_to: None,
                 thread_root: None,

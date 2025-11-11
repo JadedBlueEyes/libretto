@@ -5,6 +5,10 @@ use futures::future::join_all;
 use matrix_sdk::{Client, config::SyncSettings, sync::SyncResponse};
 use ruma::api::client::uiaa::{AuthData, Password, UserIdentifier};
 use ruma::{OwnedRoomId, UserId};
+use std::borrow::ToOwned;
+use std::convert::Into;
+use std::result::Result;
+use std::string::ToString;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
@@ -24,7 +28,7 @@ const MAX_BACKOFF_POWER: u32 = 7;
 
 /// Handles device management for the Matrix client.
 pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Result<()> {
-    let current_session = client.device_id().map(|d| d.to_owned());
+    let current_session = client.device_id().map(ToOwned::to_owned);
 
     // Delete other devices if requested
     if account_config.delete_other_devices {
@@ -41,7 +45,12 @@ pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Resu
             .map(|device| device.device_id.clone())
             .collect();
 
-        if !other_devices.is_empty() {
+        if other_devices.is_empty() {
+            debug!(
+                user_id = %client.user_id().expect("Client should be logged in"),
+                "No other devices found to delete"
+            );
+        } else {
             info!(
                 user_id = %client.user_id().expect("Client should be logged in"),
                 device_count = other_devices.len(),
@@ -49,32 +58,31 @@ pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Resu
             );
 
             // Try to delete devices with authentication
-            let auth_data = match &account_config.auth_method {
-                crate::account::config::AuthMethod::Password(password) => {
-                    Some(AuthData::Password(Password::new(
-                        UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
-                        password.clone(),
-                    )))
-                }
-                _ => {
-                    // For other auth methods, prompt for password for UIAA
-                    println!(
-                        "Type password for the account (characters won't show up as you type them)"
-                    );
-                    match rpassword::prompt_password("Password: ") {
-                        Ok(password) if !password.is_empty() => {
-                            Some(AuthData::Password(Password::new(
-                                UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
-                                password,
-                            )))
-                        }
-                        _ => {
-                            warn!(
-                                user_id = %client.user_id().expect("Client should be logged in"),
-                                "No password provided, cannot delete other devices"
-                            );
-                            None
-                        }
+            let auth_data = if let crate::account::config::AuthMethod::Password(password) =
+                &account_config.auth_method
+            {
+                Some(AuthData::Password(Password::new(
+                    UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
+                    password.clone(),
+                )))
+            } else {
+                // For other auth methods, prompt for password for UIAA
+                println!(
+                    "Type password for the account (characters won't show up as you type them)"
+                );
+                match rpassword::prompt_password("Password: ") {
+                    Ok(password) if !password.is_empty() => {
+                        Some(AuthData::Password(Password::new(
+                            UserIdentifier::UserIdOrLocalpart(account_config.user_id.clone()),
+                            password,
+                        )))
+                    }
+                    _ => {
+                        warn!(
+                            user_id = %client.user_id().expect("Client should be logged in"),
+                            "No password provided, cannot delete other devices"
+                        );
+                        None
                     }
                 }
             };
@@ -97,11 +105,6 @@ pub async fn run(client: &Client, account_config: &AccountDetails) -> eyre::Resu
                     }
                 }
             }
-        } else {
-            debug!(
-                user_id = %client.user_id().expect("Client should be logged in"),
-                "No other devices found to delete"
-            );
         }
     }
 
@@ -231,18 +234,18 @@ pub async fn sync_handler<'a>(
                     let event_type = event_de.event_type();
 
                     // Extract additional fields that may be present
-                    let transaction_id = event_de.transaction_id().map(|t| t.to_string());
+                    let transaction_id = event_de.transaction_id().map(ToString::to_string);
                     let unsigned = event
                         .raw()
                         .get_field::<serde_json::Value>("unsigned")
                         .unwrap_or_default()
-                        .unwrap_or(serde_json::json!({}));
+                        .unwrap_or_else(|| serde_json::json!({}));
                     let megolm_session_id = event.encryption_info().and_then(|e| e.session_id());
                     let content = event
                         .raw()
                         .get_field::<serde_json::Value>("content")
                         .unwrap_or_default()
-                        .unwrap_or(serde_json::json!({}));
+                        .unwrap_or_else(|| serde_json::json!({}));
 
                     // Extract relation information from content if present
                     let (relates_to, relation_type) = if let Some(content_obj) = content.as_object()
@@ -253,11 +256,11 @@ pub async fn sync_handler<'a>(
                             let relates_to = relates_to_obj
                                 .get("event_id")
                                 .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
+                                .map(ToString::to_string);
                             let relation_type = relates_to_obj
                                 .get("rel_type")
                                 .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
+                                .map(ToString::to_string);
                             (relates_to, relation_type)
                         } else {
                             (None, None)
@@ -270,9 +273,9 @@ pub async fn sync_handler<'a>(
                     let state_key = event.raw().get_field::<String>("state_key").ok().flatten();
 
                     // Insert event into database and get the rowid
-                    let timestamp_i64 = {
+                    let timestamp_i64: i64 = {
                         let timestamp_u64: u64 = timestamp.get().into();
-                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
+                        timestamp_u64.try_into().unwrap_or(i64::MAX)
                     };
 
                     let event_rowid = sqlx::query_scalar!(
@@ -368,24 +371,24 @@ pub async fn sync_handler<'a>(
                     let event_type = event_de.event_type();
 
                     // Extract additional fields that may be present
-                    let transaction_id = event_de.transaction_id().map(|t| t.to_string());
+                    let transaction_id = event_de.transaction_id().map(ToString::to_string);
                     let unsigned = event
                         .get_field::<serde_json::Value>("unsigned")
                         .unwrap_or_default()
-                        .unwrap_or(serde_json::json!({}));
+                        .unwrap_or_else(|| serde_json::json!({}));
                     let content = event
                         .get_field::<serde_json::Value>("content")
                         .unwrap_or_default()
-                        .unwrap_or(serde_json::json!({}));
+                        .unwrap_or_else(|| serde_json::json!({}));
 
                     // Extract state_key for state events (should always be present here)
                     let state_key = event.get_field::<String>("state_key").ok().flatten();
                     let state_key_for_current_state = state_key.clone();
 
                     // Insert event into database and get the rowid
-                    let timestamp_i64 = {
+                    let timestamp_i64: i64 = {
                         let timestamp_u64: u64 = timestamp.get().into();
-                        std::cmp::min(timestamp_u64, i64::MAX as u64) as i64
+                        timestamp_u64.try_into().unwrap_or(i64::MAX)
                     };
 
                     let event_rowid = sqlx::query_scalar!(
@@ -519,7 +522,7 @@ pub async fn sync_handler<'a>(
                                     .execute(&mut *tx)
                                     .await?;
                                 } else {
-                                    error!(event_id = %event_id, "Timeline state event was missing from events table")
+                                    error!(event_id = %event_id, "Timeline state event was missing from events table");
                                 }
                             }
                             Err(e) => {
@@ -641,7 +644,7 @@ pub async fn run_sync_tasks(
             .collect::<Vec<_>>();
         debug!("All sync tasks finished");
 
-        if result.iter().all(|r| r.is_err()) {
+        if result.iter().all(Result::is_err) {
             error!(results = ?result, "Sync tasks failed, restarting");
         } else {
             info!(results = ?result, "Sync tasks completed successfully");
@@ -711,7 +714,7 @@ fn spawn_sync_task(
                         );
                         return Err(e);
                     }
-                };
+                }
             } else {
                 break;
             }
@@ -734,7 +737,7 @@ async fn perform_initial_room_update(client: &Client, db: &DatabasePool) -> eyre
     let rooms: Vec<_> = client.rooms().into_iter().collect();
 
     db.acquire()
-        .map_err(|e| e.into())
+        .map_err(Into::into)
         .and_then(async |mut tx| crate::room_list::update_rooms(&rooms, user_id, &mut tx).await)
         .await
 }
@@ -820,7 +823,7 @@ async fn run_sync_loop(
                 }
             }
         },
-        _ = server::shutdown_signal() => debug!(
+        () = server::shutdown_signal() => debug!(
             user_id = %user_id,
             "Sync shutdown requested"
         ),
@@ -841,7 +844,7 @@ async fn perform_sync_once(
 
     client
         .sync_once(sync_settings.clone())
-        .map_err(|e| e.into())
+        .map_err(Into::into)
         .and_then(async |response: SyncResponse| {
             let tx = db.begin().await?;
             Ok((response, tx))

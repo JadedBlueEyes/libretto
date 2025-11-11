@@ -71,6 +71,7 @@ pub async fn static_service<F: rust_embed::Embed>(uri: http::Uri) -> impl IntoRe
     }
 }
 
+#[allow(clippy::unused_async)]
 pub async fn handle_404() -> (http::StatusCode, &'static str) {
     (http::StatusCode::NOT_FOUND, "Not found")
 }

@@ -2,7 +2,7 @@ use crate::account::config::AccountDetails;
 use color_eyre::eyre;
 use ruma::{ServerName, UserId};
 
-/// Selects the primary account from a list of accounts based on the provided primary_user_id.
+/// Selects the primary account from a list of accounts based on the provided `primary_user_id`.
 ///
 /// # Arguments
 /// * `accounts` - List of available accounts
@@ -11,10 +11,13 @@ use ruma::{ServerName, UserId};
 /// # Returns
 /// * `Ok(AccountDetails)` - The selected primary account
 /// * `Err(eyre::Error)` - If no accounts provided or no matching account found
-pub fn select_primary_account<'a>(
-    accounts: &'a [AccountDetails],
+///
+/// # Errors
+/// Returns an error if the accounts list is empty or if no account matches the provided `primary_user_id`.
+pub fn select_primary_account<'accounts>(
+    accounts: &'accounts [AccountDetails],
     primary_user_id: Option<&str>,
-) -> eyre::Result<&'a AccountDetails> {
+) -> eyre::Result<&'accounts AccountDetails> {
     if accounts.is_empty() {
         return Err(eyre::eyre!("No accounts found in config file"));
     }
@@ -66,7 +69,10 @@ fn matches_account(
     false
 }
 
-/// Construct a full Matrix user ID from user_id and homeserver
+/// Construct a full Matrix user ID from `user_id` and homeserver
+///
+/// # Errors
+/// Returns an error if the user ID cannot be parsed as a valid Matrix user ID.
 pub fn construct_full_user_id(
     user_id: &str,
     homeserver: Option<&ServerName>,
@@ -80,13 +86,15 @@ pub fn construct_full_user_id(
 
 #[cfg(test)]
 mod tests {
+    use std::string::ToString;
+
     use super::*;
     use crate::account::config::{AccountDetails, AuthMethod};
 
     fn create_test_account(user_id: &str, homeserver: Option<&str>) -> AccountDetails {
         AccountDetails {
             user_id: user_id.to_string(),
-            homeserver: homeserver.map(|s| s.to_string()),
+            homeserver: homeserver.map(ToString::to_string),
             auth_method: AuthMethod::None,
             recovery_key: None,
             enable_encryption: true,

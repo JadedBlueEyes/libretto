@@ -23,7 +23,7 @@
             {{ event.sender.as_str() }}
         </div>
     {% endif %}
-    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_format_string(event.timestamp) }}</time>
+    <time class="profile-timestamp" datetime="{{ self::timestamp_to_string(*event.timestamp) }}">{{ self::timestamp_to_format_string(*event.timestamp) }}</time>
 </div>
 <div class="event-content message-like">
     {% match message_like_event.kind %}
@@ -393,7 +393,7 @@
         </div>
     {% endif %}
 
-    <time class="timestamp-inner" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_short_format_string(event.timestamp) }}</time>
+    <time class="timestamp-inner" datetime="{{ self::timestamp_to_string(*event.timestamp) }}">{{ self::timestamp_to_short_format_string(*event.timestamp) }}</time>
 </div>
 
-<time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(event.timestamp) }}">{{ self::timestamp_to_short_format_string(event.timestamp) }}</time>
+<time class="timestamp-trailing" datetime="{{ self::timestamp_to_string(*event.timestamp) }}">{{ self::timestamp_to_short_format_string(*event.timestamp) }}</time>

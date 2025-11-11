@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Account details for Matrix bots
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[non_exhaustive]
 pub struct AccountDetails {
     /// The Matrix user ID (@user:example.com)
     /// This *must* be a full, valid Matrix user ID, not a 3pid
@@ -33,10 +34,11 @@ pub struct AccountDetails {
     pub delete_other_devices: bool,
 }
 
-fn default_enable_encryption() -> bool {
+const fn default_enable_encryption() -> bool {
     true
 }
 
+#[non_exhaustive]
 pub struct DefaultAccountConfig {
     /// Device name to set, if it doesn't exist
     pub device_name: String,
