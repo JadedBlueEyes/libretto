@@ -64,7 +64,7 @@ jobs:
       DOCKER_HUB_REPO_NAME: ${{vars.DOCKER_HUB_REPO_NAME || ''}}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
