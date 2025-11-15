@@ -19,7 +19,7 @@ runs:
     shell: bash
     run: |
       curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.10/prefligit-installer.sh | sh
-  - uses: actions/cache@v3
+  - uses: actions/cache@v4
     with:
       path: ~/.cache/prefligit
       key: prefligit-0|${{ hashFiles('.pre-commit-config.yaml') }}

@@ -46,7 +46,7 @@ jobs:
           echo "CMAKE_CUDA_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
 
       - name: Cache Rust registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/git
@@ -101,7 +101,7 @@ jobs:
           echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
           echo "CMAKE_CUDA_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
       - name: Cache Rust registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/git
