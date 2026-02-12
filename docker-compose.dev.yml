@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: libretto-postgres-dev
     environment:
       POSTGRES_DB: libretto_dev
