@@ -24,7 +24,7 @@ jobs:
       docker_image: ${{ steps.var.outputs.docker_image }}
     steps:
       - name: Setting variables
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         id: var
         with:
           script: |
