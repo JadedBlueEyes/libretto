@@ -5,7 +5,7 @@ use futures::TryFutureExt;
 use matrix_sdk::{Client, SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
 use ruma::{ServerName, UserId};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::{
     DatabaseConnection, DatabasePool,

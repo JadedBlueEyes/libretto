@@ -60,10 +60,10 @@ fn matches_account(
     }
 
     // Try to construct full user ID from account and compare
-    if let Ok(full_account_id) = construct_full_user_id(account_user_id, account_homeserver) {
-        if full_account_id == primary_user_id {
-            return true;
-        }
+    if let Ok(full_account_id) = construct_full_user_id(account_user_id, account_homeserver)
+        && full_account_id == primary_user_id
+    {
+        return true;
     }
 
     false

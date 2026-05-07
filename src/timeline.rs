@@ -295,23 +295,23 @@ fn create_redacted_timeline_event(
 /// Build a `TimelineEvent` from a database row
 pub async fn build_timeline_event_from_db(evt: DbTimelineEvent) -> eyre::Result<TimelineEvent> {
     // Hide edit events
-    if let Some(ref relation_type) = evt.relation_type {
-        if relation_type == "m.replace" {
-            return Ok(TimelineEvent {
-                event_id: evt.event_id.try_into()?,
-                sender: evt.sender.try_into()?,
-                sender_profile: None,
-                timestamp: MilliSecondsSinceUnixEpoch(evt.timestamp.try_into()?),
-                content: TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
-                    kind: MsgLikeKind::Hidden,
-                    reactions: ReactionsByKeyBySender::default(),
-                    in_reply_to: None,
-                    thread_root: None,
-                })),
-                same_sender: false,
-                raw_content: evt.raw_content.0,
-            });
-        }
+    if let Some(ref relation_type) = evt.relation_type
+        && relation_type == "m.replace"
+    {
+        return Ok(TimelineEvent {
+            event_id: evt.event_id.try_into()?,
+            sender: evt.sender.try_into()?,
+            sender_profile: None,
+            timestamp: MilliSecondsSinceUnixEpoch(evt.timestamp.try_into()?),
+            content: TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
+                kind: MsgLikeKind::Hidden,
+                reactions: ReactionsByKeyBySender::default(),
+                in_reply_to: None,
+                thread_root: None,
+            })),
+            same_sender: false,
+            raw_content: evt.raw_content.0,
+        });
     }
 
     // Extract data from the row
@@ -572,14 +572,6 @@ async fn messagelike_to_content_with_edit(
         AnyMessageLikeEventContent::CallSdpStreamMetadataChanged(call_sdp_content) => {
             TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
                 kind: MsgLikeKind::CallMetadataChanged(call_sdp_content.call_id.to_string()),
-                reactions: ReactionsByKeyBySender::default(),
-                in_reply_to: None,
-                thread_root: None,
-            }))
-        }
-        AnyMessageLikeEventContent::CallNotify(call_notify_content) => {
-            TimelineItemContent::MsgLike(Box::new(MsgLikeContent {
-                kind: MsgLikeKind::CallNotify(call_notify_content.call_id),
                 reactions: ReactionsByKeyBySender::default(),
                 in_reply_to: None,
                 thread_root: None,

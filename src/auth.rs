@@ -2,7 +2,7 @@ use color_eyre::eyre::{self};
 use matrix_sdk::Client;
 use matrix_sdk::encryption::Encryption;
 use matrix_sdk::{SessionMeta, SessionTokens, authentication::matrix::MatrixSession};
-use rand::Rng;
+use rand::RngExt;
 use rand::distr::Alphanumeric;
 use rpassword::prompt_password;
 use tracing::{debug, error, info, instrument, warn};
@@ -21,7 +21,7 @@ pub async fn login(
 ) -> eyre::Result<(Client, FullSession)> {
     info!(
         user_id = %config.user_id,
-        homeserver = %config.homeserver.as_ref().map_or_else(|| "<from user_id>", |s| s),
+        homeserver = %config.homeserver.as_deref().unwrap_or("<from user_id>"),
         "Starting authentication"
     );
     // Generate a random passphrase.
