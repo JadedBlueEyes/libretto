@@ -141,8 +141,8 @@ pub async fn room_internal(
                         event.timestamp as "timestamp!", event.content as "raw_content!: Json<Box<serde_json::value::RawValue>>",
                         event.unsigned as "raw_unsigned!: Json<Box<serde_json::value::RawValue>>", event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,
                         event.megolm_session_id, event.last_edit_rowid,
-                        edit_event.content as "edit_content: Json<Box<serde_json::value::RawValue>>",
-                        redaction_event.content as "redaction_content: Json<Box<serde_json::value::RawValue>>"
+                        edit_event.content as "edit_content?: Json<Box<serde_json::value::RawValue>>",
+                        redaction_event.content as "redaction_content?: Json<Box<serde_json::value::RawValue>>"
                     FROM timeline
                     JOIN event ON event.rowid = timeline.event_rowid
                         AND event.room_id = timeline.room_id

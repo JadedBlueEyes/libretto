@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                        event.rowid as \"rowid!\", timeline.rowid as \"timeline_rowid!\",\n                        event.room_id as \"room_id!\", event.event_id as \"event_id!\", event.sender as \"sender!\", event.event_type as \"event_type!\", event.state_key,\n                        event.timestamp as \"timestamp!\", event.content as \"raw_content!: Json<Box<serde_json::value::RawValue>>\",\n                        event.unsigned as \"raw_unsigned!: Json<Box<serde_json::value::RawValue>>\", event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,\n                        event.megolm_session_id, event.last_edit_rowid,\n                        edit_event.content as \"edit_content: Json<Box<serde_json::value::RawValue>>\",\n                        redaction_event.content as \"redaction_content: Json<Box<serde_json::value::RawValue>>\"\n                    FROM timeline\n                    JOIN event ON event.rowid = timeline.event_rowid\n                        AND event.room_id = timeline.room_id\n                        AND event.user_id = timeline.user_id\n                    LEFT JOIN event AS edit_event ON event.last_edit_rowid = edit_event.rowid\n                        AND event.room_id = edit_event.room_id\n                        AND event.user_id = edit_event.user_id\n                    LEFT JOIN event AS redaction_event ON event.redacted_by = redaction_event.event_id\n                        AND event.room_id = redaction_event.room_id\n                        AND event.user_id = redaction_event.user_id\n                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)\n                    ORDER BY timeline.rowid DESC\n                    LIMIT $4;",
+  "query": "SELECT\n                        event.rowid as \"rowid!\", timeline.rowid as \"timeline_rowid!\",\n                        event.room_id as \"room_id!\", event.event_id as \"event_id!\", event.sender as \"sender!\", event.event_type as \"event_type!\", event.state_key,\n                        event.timestamp as \"timestamp!\", event.content as \"raw_content!: Json<Box<serde_json::value::RawValue>>\",\n                        event.unsigned as \"raw_unsigned!: Json<Box<serde_json::value::RawValue>>\", event.transaction_id, event.redacted_by, event.relates_to, event.relation_type,\n                        event.megolm_session_id, event.last_edit_rowid,\n                        edit_event.content as \"edit_content?: Json<Box<serde_json::value::RawValue>>\",\n                        redaction_event.content as \"redaction_content?: Json<Box<serde_json::value::RawValue>>\"\n                    FROM timeline\n                    JOIN event ON event.rowid = timeline.event_rowid\n                        AND event.room_id = timeline.room_id\n                        AND event.user_id = timeline.user_id\n                    LEFT JOIN event AS edit_event ON event.last_edit_rowid = edit_event.rowid\n                        AND event.room_id = edit_event.room_id\n                        AND event.user_id = edit_event.user_id\n                    LEFT JOIN event AS redaction_event ON event.redacted_by = redaction_event.event_id\n                        AND event.room_id = redaction_event.room_id\n                        AND event.user_id = redaction_event.user_id\n                    WHERE timeline.user_id = $1 AND timeline.room_id = $2 AND ($3 = 0 OR timeline.rowid <= $3)\n                    ORDER BY timeline.rowid DESC\n                    LIMIT $4;",
   "describe": {
     "columns": [
       {
@@ -181,7 +181,7 @@
       },
       {
         "ordinal": 16,
-        "name": "edit_content: Json<Box<serde_json::value::RawValue>>",
+        "name": "edit_content?: Json<Box<serde_json::value::RawValue>>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -192,7 +192,7 @@
       },
       {
         "ordinal": 17,
-        "name": "redaction_content: Json<Box<serde_json::value::RawValue>>",
+        "name": "redaction_content?: Json<Box<serde_json::value::RawValue>>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -231,5 +231,5 @@
       false
     ]
   },
-  "hash": "dd0ec1427cdb9258c95832faabcc5ede59e5a966352b681ac66a800dee476172"
+  "hash": "9b5d2cb926c68c1f85c1c296989af041cd466eba354b4dde30341ac62aaa4cd6"
 }
