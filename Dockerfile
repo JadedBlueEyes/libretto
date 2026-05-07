@@ -2,6 +2,7 @@ ARG RUST_VERSION=1
 ARG DEBIAN_VERSION=bookworm
 
 FROM --platform=$BUILDPLATFORM node:24-slim AS web
+ENV CI=true
 
 RUN corepack enable
 
