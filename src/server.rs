@@ -6,7 +6,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
-use color_eyre::eyre::{self, ContextCompat};
+use color_eyre::eyre::{self, Context, ContextCompat};
 use matrix_sdk::{
     Client,
     media::{MediaFormat, MediaThumbnailSettings},
@@ -97,12 +97,13 @@ pub async fn room_internal(
             .read()
             .await
             .resolve_room_alias(alias)
-            .await?
+            .await
+            .wrap_err("Could not resolve room alias")?
             .room_id
     } else {
         OwnedRoomId::try_from(room_id.as_str())
-            .map_err(AppError::from)
-            .expect("Room ID was not a valid ID or alias!")
+            .wrap_err("Room ID was not a valid ID or alias!")
+            .unwrap()
     };
 
     // client
@@ -161,7 +162,8 @@ pub async fn room_internal(
                     i64::try_from(limit + 1).unwrap_or(i64::MAX)
                 )
                 .fetch_all(&db)
-                .await?;
+                .await
+                .wrap_err("Failed to fetch timeline from database")?;
 
     let mut hit_end_of_timeline = false;
     let mut next_page = None;
@@ -238,7 +240,8 @@ pub async fn room_internal(
             &sender_list
         )
         .fetch_all(&db)
-        .await?;
+        .await
+        .wrap_err("Failed to get user profiles from database")?;
 
         // First pass: collect all display names and their counts
         let mut display_name_counts: std::collections::HashMap<String, u32> =
@@ -361,7 +364,8 @@ pub async fn load_media_file(
         .await
         .media()
         .get_media_content(&request, true)
-        .await?;
+        .await
+        .wrap_err("Failed to load media")?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/octet-stream"),

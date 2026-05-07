@@ -208,11 +208,17 @@ impl TryFrom<OptionAliasDbParser> for Option<OwnedRoomAliasId> {
 /// Helper function to create a `RoomListEntry` from a matrix-sdk `Room`
 pub async fn room_to_list_entry(room: &Room) -> Result<RoomListEntry, AppError> {
     let room_id = room.room_id().to_owned();
-    let is_direct = room.is_direct().await?;
+    let is_direct = room
+        .is_direct()
+        .await
+        .wrap_err("Could not calculate if room is direct")?;
 
     Ok(RoomListEntry {
         id: room_id,
-        name: room.display_name().await?,
+        name: room
+            .display_name()
+            .await
+            .wrap_err("Could not get room display name")?,
         avatar_url: room.avatar_url().map(|url| url.to_string()),
         is_encrypted: room.encryption_state().is_encrypted(),
         is_direct,
