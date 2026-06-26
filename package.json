@@ -10,7 +10,7 @@
 	"keywords": [],
 	"author": "",
 	"license": "",
-	"packageManager": "pnpm@11.0.8",
+	"packageManager": "pnpm@11.9.0",
 	"devDependencies": {
 		"@types/node": "^24.12.2",
 		"typescript": "^5.9.3",
